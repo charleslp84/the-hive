@@ -105,7 +105,10 @@ describe('formatLastUsed', () => {
  * a fleet row just because a minute passed, so the ticking has to live here —
  * and a test that never advances a clock cannot tell the two shapes apart.
  */
+let renders = 0;
+
 function Harness({ usedAt }: { usedAt: number }): ReactElement {
+  renders += 1;
   return createElement('span', { 'data-testid': 'label' }, useLastUsed(usedAt));
 }
 
@@ -114,6 +117,7 @@ const label = (): string =>
 
 describe('useLastUsed', () => {
   beforeEach(() => {
+    renders = 0;
     vi.useFakeTimers();
     vi.setSystemTime(AT);
   });
@@ -135,21 +139,47 @@ describe('useLastUsed', () => {
   /**
    * A fleet of thirteen day-old rows must not wake the renderer every fifteen
    * seconds to change nothing. The cadence widens with the age, so an hour-old
-   * row is on the five-minute schedule — advancing four minutes past its last
-   * tick leaves the label alone.
+   * row is on the five-minute schedule.
+   *
+   * The assertion counts renders rather than reading the label, because the
+   * label cannot tell the two cadences apart: `3 hr ago` still says `3 hr ago`
+   * after four minutes whether it was recomputed once or sixteen times, so a
+   * hook that regressed to the fifteen-second schedule would pass a text
+   * assertion while waking the renderer fifty times a minute for a fleet.
+   *
+   * The two halves also prove each other. A counter that never moved would
+   * pass the first and fail the second; one wired to every tick fails the
+   * first. Only the five-minute schedule passes both.
    */
   it('leaves an hours-old row alone between its slower ticks', () => {
     render(createElement(Harness, { usedAt: AT - 3 * HR }));
     expect(label()).toBe('3 hr ago');
 
+    const atMount = renders;
+
     act(() => {
       vi.advanceTimersByTime(4 * MIN);
     });
 
+    /**
+     * Zero, exactly. React batches a synchronous burst of `setNow` calls into
+     * one render, so a regressed hook's sixteen fifteen-second ticks show up
+     * here as a single extra render rather than sixteen — which is why the
+     * assertion is `atMount` and not a ceiling. Not repainting at all is the
+     * claim; how many repaints a regression costs is React's business.
+     */
+    expect(renders).toBe(atMount);
     expect(label()).toBe('3 hr ago');
 
     act(() => {
-      vi.advanceTimersByTime(57 * MIN);
+      vi.advanceTimersByTime(MIN);
+    });
+
+    expect(renders).toBeGreaterThan(atMount);
+    expect(label()).toBe('3 hr ago');
+
+    act(() => {
+      vi.advanceTimersByTime(56 * MIN);
     });
 
     expect(label()).toBe('4 hr ago');
