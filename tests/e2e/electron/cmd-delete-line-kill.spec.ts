@@ -126,28 +126,89 @@ async function collect(page: Page): Promise<void> {
   );
 }
 
+/** `ESC`, and the `BEL` that can terminate a string sequence. */
+const ESC = 0x1b;
+const BEL = 0x07;
+
+/**
+ * The index just past the escape sequence beginning at `start`.
+ *
+ * A scanner rather than a regex, and deliberately so: expressing these patterns
+ * as regexes means literal control characters in them, which trips
+ * `no-control-regex`, and the house rule is that no lint rule may be disabled
+ * inline to make code pass. `electron/main/clone/parse-url.ts` reaches for the
+ * code points for the same reason. Reading them directly says the same thing
+ * and needs no exemption.
+ *
+ * Three shapes, because a TUI emits all three: `CSI` (`ESC [` … final byte in
+ * `@`–`~`), the string sequences (`OSC`/`DCS`/`APC`/`PM`/`SOS`, run until `BEL`
+ * or the `ESC \` string terminator), and the plain two-byte escapes, which may
+ * carry one intermediate byte — `ESC ( B` is the one Claude actually sends.
+ */
+function skipEscape(raw: string, start: number): number {
+  let i = start + 1;
+  const introducer = raw.codePointAt(i);
+  if (introducer === undefined) return i;
+
+  const OPEN_BRACKET = 0x5b;
+  const STRING_INTRODUCERS = new Set([0x5d, 0x50, 0x5f, 0x5e, 0x58]);
+  const BACKSLASH = 0x5c;
+
+  if (introducer === OPEN_BRACKET) {
+    i += 1;
+    while (i < raw.length) {
+      const code = raw.codePointAt(i) ?? 0;
+      i += 1;
+      if (code >= 0x40 && code <= 0x7e) break;
+    }
+    return i;
+  }
+
+  if (STRING_INTRODUCERS.has(introducer)) {
+    i += 1;
+    while (i < raw.length) {
+      const code = raw.codePointAt(i) ?? 0;
+      if (code === BEL) return i + 1;
+      if (code === ESC && (raw.codePointAt(i + 1) ?? 0) === BACKSLASH) return i + 2;
+      i += 1;
+    }
+    return i;
+  }
+
+  i += 1;
+  const isIntermediate = introducer >= 0x20 && introducer <= 0x2f;
+  return isIntermediate && i < raw.length ? i + 1 : i;
+}
+
 /**
  * Escapes stripped and whitespace squashed out, for matching.
  *
- * Both halves are load-bearing, and both were learned the hard way — two runs
- * timed out against a prompt that had been ready for a minute. Claude paints
- * the gaps between words with cursor-forward escapes as readily as with
- * literal spaces, so `shift+tab to cycle` reaches this stream with a `CUF`
- * sequence where the pattern expected a space. Even `\s*` cannot match that.
+ * Both halves are load-bearing, and both were learned from runs that timed out
+ * against a prompt which had been ready for a minute. Claude paints the gaps
+ * between words with cursor-forward escapes as readily as with literal spaces,
+ * so `shift+tab to cycle` arrives in this stream with a `CUF` sequence where
+ * the pattern expected a space — and no amount of `\s*` can match an escape.
  *
- * So the escapes go, and then the whitespace goes too, because which of the two
- * a given gap was drawn as is not stable between repaints. What is left is the
- * letters in order, which is the only part of a TUI frame worth asserting on.
+ * So the escapes go, and the remaining control bytes with them, and then the
+ * whitespace goes too, because which of the two a given gap was drawn as is not
+ * stable between repaints. What is left is the letters in order, which is the
+ * only part of a TUI frame worth asserting on.
  */
 function squashed(raw: string): string {
-  return (
-    raw
-      // eslint-disable-next-line no-control-regex
-      .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/gu, '')
-      // eslint-disable-next-line no-control-regex
-      .replace(/\u001b[[\]()#;?]*[0-9;?]*[ -/]*[@-~]/gu, '')
-      .replace(/\s+/gu, '')
-  );
+  let out = '';
+  let i = 0;
+  while (i < raw.length) {
+    const code = raw.codePointAt(i) ?? 0;
+    if (code === ESC) {
+      i = skipEscape(raw, i);
+      continue;
+    }
+    // C0 and DEL carry no letters — `BEL`, `BS` and the rest are noise here.
+    if (code >= 0x20 && code !== 0x7f) out += raw[i];
+    i += 1;
+  }
+  // A plain pattern, so no exemption: `\s` names no control character itself.
+  return out.replace(/\s+/gu, '');
 }
 
 const output = (page: Page): Promise<string> =>
@@ -243,6 +304,17 @@ test.skip(!enabled, 'set HIVE_LIVE_KILL_PROOF=1 — spawns a real claude');
 test.setTimeout(300_000);
 
 test('Cmd+Delete kills the whole line at a real Claude prompt', async ({}, testInfo) => {
+  /**
+   * The rule under test is macOS-only, so the spec is too.
+   *
+   * `isLineKillChord` returns `false` off macOS by design — `Ctrl+U` is already
+   * on those keyboards and `Cmd` is not — so on Linux or Windows the chord
+   * stays `to-pty`, xterm encodes its `DEL`, and the kill-hint assertion fails
+   * for the correct behaviour. The same guard, for the same reason, as the
+   * `Cmd`+arrow case in `interactive-terminal.spec.ts`.
+   */
+  test.skip(process.platform !== 'darwin', 'Cmd is a macOS-only modifier');
+
   const configPath = testInfo.outputPath('hive-config.json');
   writeConfig(configPath, scratchProject(testInfo.outputPath('.')));
 
