@@ -21,6 +21,8 @@ interface Options {
   max?: number;
   step?: number;
   onReset?: () => void;
+  collapseBelow?: number;
+  onCollapse?: () => void;
   rect?: { left: number; top: number; width: number; height: number };
 }
 
@@ -34,6 +36,8 @@ function renderHandle(
     max,
     step,
     onReset,
+    collapseBelow,
+    onCollapse,
     rect = { left: 100, top: 50, width: 400, height: 200 },
   }: Options = {},
 ) {
@@ -55,6 +59,8 @@ function renderHandle(
       max={max}
       step={step}
       onReset={onReset}
+      collapseBelow={collapseBelow}
+      onCollapse={onCollapse}
     />,
   );
 
@@ -320,6 +326,96 @@ describe('SplitHandle', () => {
       await userEvent.dblClick(handle);
 
       expect(handle).toBeInTheDocument();
+    });
+  });
+
+  describe('collapseBelow', () => {
+    it('calls onCollapse and never onValue below the threshold', () => {
+      // No bogus width may reach the store: the raw pointer reading is
+      // tested *before* clamp, which would have floored it back to min.
+      const onCollapse = vi.fn();
+      const { onValue, handle } = renderHandle('vertical', vi.fn(), {
+        scale: 'px-from-start',
+        value: 268,
+        min: 268,
+        collapseBelow: 228,
+        onCollapse,
+      });
+
+      fireEvent.pointerDown(handle);
+      fireEvent.pointerMove(window, { clientX: 150, clientY: 0 }); // reads as 50
+
+      expect(onCollapse).toHaveBeenCalled();
+      expect(onValue).not.toHaveBeenCalled();
+    });
+
+    it('calls onValue with a clamped width above the threshold', () => {
+      const onCollapse = vi.fn();
+      const { onValue, handle } = renderHandle('vertical', vi.fn(), {
+        scale: 'px-from-start',
+        value: 268,
+        min: 268,
+        max: 520,
+        collapseBelow: 228,
+        onCollapse,
+      });
+
+      fireEvent.pointerDown(handle);
+      fireEvent.pointerMove(window, { clientX: 400, clientY: 0 }); // reads as 300
+
+      expect(onValue).toHaveBeenCalledWith(300);
+      expect(onCollapse).not.toHaveBeenCalled();
+    });
+
+    it('collapses on an arrow key that would go below the threshold', () => {
+      // `value` is a prop and does not move between presses — the component
+      // is never re-rendered here — so each case is one press from a stated
+      // starting width, not a sequence.
+      const onCollapse = vi.fn();
+      const { onValue, handle } = renderHandle('vertical', vi.fn(), {
+        scale: 'px-from-start',
+        value: 232,
+        min: 268,
+        step: 8,
+        collapseBelow: 228,
+        onCollapse,
+      });
+
+      fireEvent.keyDown(handle, { key: 'ArrowLeft' }); // 232 - 8 = 224, under 228
+
+      expect(onCollapse).toHaveBeenCalled();
+      expect(onValue).not.toHaveBeenCalled();
+    });
+
+    it('does not collapse on an arrow key that stays above the threshold', () => {
+      const onCollapse = vi.fn();
+      const { handle } = renderHandle('vertical', vi.fn(), {
+        scale: 'px-from-start',
+        value: 300,
+        min: 228,
+        step: 8,
+        collapseBelow: 228,
+        onCollapse,
+      });
+
+      fireEvent.keyDown(handle, { key: 'ArrowLeft' }); // 300 - 8 = 292
+
+      expect(onCollapse).not.toHaveBeenCalled();
+    });
+
+    it('behaves exactly as before when the props are absent', () => {
+      // Every existing consumer — the editor divider included — passes
+      // neither, and must be untouched.
+      const { onValue, handle } = renderHandle('vertical', vi.fn(), {
+        scale: 'px-from-start',
+        value: 268,
+        min: 268,
+      });
+
+      fireEvent.pointerDown(handle);
+      fireEvent.pointerMove(window, { clientX: 150, clientY: 0 });
+
+      expect(onValue).toHaveBeenCalledWith(268);
     });
   });
 });

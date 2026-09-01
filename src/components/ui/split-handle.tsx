@@ -52,6 +52,15 @@ interface SplitHandleProps {
    * with no notion of a default.
    */
   onReset?: () => void;
+  /**
+   * A raw value below this collapses instead of resizing.
+   *
+   * Tested **before** {@link clamp}, deliberately: clamp floors at `min` and
+   * would erase the very reading this needs. Omitted by consumers with no
+   * notion of a collapsed state — the editor divider passes neither.
+   */
+  collapseBelow?: number;
+  onCollapse?: () => void;
   /** Extra classes for positioning — the rails absolutely-position their handle. */
   className?: string;
 }
@@ -101,6 +110,8 @@ export function SplitHandle({
   max = scale === 'ratio' ? 1 : Number.POSITIVE_INFINITY,
   step = scale === 'ratio' ? RATIO_STEP : 8,
   onReset,
+  collapseBelow,
+  onCollapse,
   className,
 }: SplitHandleProps) {
   const vertical = axis === 'vertical';
@@ -115,6 +126,21 @@ export function SplitHandle({
   const clamp = useCallback(
     (next: number) => Math.max(min, Math.min(max, next)),
     [max, min],
+  );
+
+  /**
+   * Returns true when the gesture has gone past the collapse threshold and has
+   * been handled. The caller must then *not* call `onValue` — writing a width
+   * for a rail that is collapsing is what would leave the two disagreeing.
+   */
+  const tookCollapse = useCallback(
+    (raw: number) => {
+      if (collapseBelow === undefined || onCollapse === undefined) return false;
+      if (raw >= collapseBelow) return false;
+      onCollapse();
+      return true;
+    },
+    [collapseBelow, onCollapse],
   );
 
   const onPointerDown = useCallback(
@@ -132,13 +158,15 @@ export function SplitHandle({
         const size = vertical ? rect.width : rect.height;
         const fromStart = vertical ? move.clientX - rect.left : move.clientY - rect.top;
 
-        if (scale === 'ratio') {
-          onValue(clamp(fromStart / size));
-        } else if (scale === 'px-from-start') {
-          onValue(clamp(fromStart));
-        } else {
-          onValue(clamp(size - fromStart));
-        }
+        const raw =
+          scale === 'ratio'
+            ? fromStart / size
+            : scale === 'px-from-start'
+              ? fromStart
+              : size - fromStart;
+
+        if (tookCollapse(raw)) return;
+        onValue(clamp(raw));
       };
 
       const onUp = () => {
@@ -157,7 +185,7 @@ export function SplitHandle({
        */
       window.addEventListener('pointercancel', onUp);
     },
-    [clamp, containerRef, onValue, scale, vertical],
+    [clamp, containerRef, onValue, scale, tookCollapse, vertical],
   );
 
   const onKeyDown = useCallback(
@@ -174,6 +202,8 @@ export function SplitHandle({
 
       const move = (to: number) => {
         event.preventDefault();
+
+        if (tookCollapse(to)) return;
 
         const next = clamp(to);
         /*
@@ -199,7 +229,7 @@ export function SplitHandle({
         move(value + step * sign);
       }
     },
-    [clamp, onValue, scale, step, value, vertical],
+    [clamp, onValue, scale, step, tookCollapse, value, vertical],
   );
 
   /*
