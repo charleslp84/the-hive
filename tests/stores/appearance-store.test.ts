@@ -1055,14 +1055,36 @@ describe('rail collapse', () => {
 });
 
 describe('rail collapse migration', () => {
-  it('reads a v3 payload written before collapse existed as expanded', () => {
-    // The regression this guards: `merge` spreads the persisted payload
-    // over `currentState`, so an absent key must fall back to `false` and
-    // not to `undefined` — which would render a strip on first launch for
-    // every existing user.
-    const merged = migrateAppearance({ density: 'comfortable' }, 3);
+  it('migrateAppearance passes unknown-key-absence through untouched', () => {
+    // Documents the input to the real pipeline exercised below: a v3 payload
+    // written before collapse existed simply has no opinion on the flag.
+    const migrated = migrateAppearance({ density: 'comfortable' }, 3);
+    expect(migrated.railCollapsedLeft).toBeUndefined();
+  });
 
-    expect(merged.railCollapsedLeft).toBeUndefined();
-    expect({ ...useAppearanceStore.getState(), ...merged }.railCollapsedLeft).toBe(false);
+  it('reads a v3 payload written before collapse existed as expanded', async () => {
+    // The regression this guards: the persist `merge` option spreads
+    // `currentState` before the persisted payload, so a payload that lacks
+    // `railCollapsedLeft`/`railCollapsedRight` (as every payload written
+    // before this feature existed does) must fall back to `initialAppearanceState`'s
+    // `false` — not to `undefined`, which would render a strip on first
+    // launch for every existing user. This goes through the actual `persist`
+    // rehydration path (matching the store's current `version: 3`, so no
+    // `migrate` branch runs — only `merge`) rather than reimplementing it.
+    localStorage.setItem(
+      APPEARANCE_STORAGE_KEY,
+      JSON.stringify({
+        version: 3,
+        state: {
+          density: 'compact',
+        },
+      }),
+    );
+
+    vi.resetModules();
+    const { useAppearanceStore: store } = await import('@stores/appearance-store');
+
+    expect(store.getState().railCollapsedLeft).toBe(false);
+    expect(store.getState().railCollapsedRight).toBe(false);
   });
 });
