@@ -11,6 +11,7 @@ import {
   RAIL_MAX_FRACTION,
   RAIL_MAX_PX,
   RAIL_MIN,
+  RAIL_STRIP,
   railFloorWindowWidth,
   railMaxWidth,
   railWidthConstantsHold,
@@ -37,7 +38,8 @@ const clamp = (over: Partial<RailWidthInput> = {}) =>
     storedRight: null,
     min: COMFORTABLE,
     windowWidth: 1920,
-    showActivityRail: true,
+    left: 'expanded',
+    right: 'expanded',
     ...over,
   });
 
@@ -243,7 +245,8 @@ describe('clampRailWidths', () => {
                 storedRight: stored,
                 min,
                 windowWidth,
-                showActivityRail,
+                left: 'expanded',
+                right: showActivityRail ? 'expanded' : 'hidden',
               });
 
               expect(stageShare(widths, windowWidth)).toBeGreaterThanOrEqual(
@@ -258,7 +261,7 @@ describe('clampRailWidths', () => {
 
   describe('the hidden activity rail', () => {
     it('claims no width at all', () => {
-      expect(clamp({ showActivityRail: false }).right).toBe(0);
+      expect(clamp({ right: 'hidden' }).right).toBe(0);
     });
 
     /**
@@ -269,8 +272,8 @@ describe('clampRailWidths', () => {
     it('returns its budget when the window is too narrow for both', () => {
       const windowWidth = 700;
 
-      const shown = clamp({ windowWidth, showActivityRail: true });
-      const hidden = clamp({ windowWidth, showActivityRail: false });
+      const shown = clamp({ windowWidth, right: 'expanded' });
+      const hidden = clamp({ windowWidth, right: 'hidden' });
 
       expect(shown.left).toBeLessThan(COMFORTABLE.left);
       expect(hidden.left).toBe(COMFORTABLE.left);
@@ -278,7 +281,7 @@ describe('clampRailWidths', () => {
     });
 
     it('ignores a stored width for a rail that is not mounted', () => {
-      expect(clamp({ storedRight: 500, showActivityRail: false }).right).toBe(0);
+      expect(clamp({ storedRight: 500, right: 'hidden' }).right).toBe(0);
     });
   });
 
@@ -297,6 +300,46 @@ describe('clampRailWidths', () => {
       expect(Number.isInteger(widths.left)).toBe(true);
       expect(Number.isInteger(widths.right)).toBe(true);
     });
+  });
+});
+
+describe('a collapsed rail', () => {
+  it('is exactly RAIL_STRIP, at both densities', () => {
+    expect(clamp({ left: 'collapsed' }).left).toBe(RAIL_STRIP);
+    expect(clamp({ left: 'collapsed', min: COMPACT }).left).toBe(RAIL_STRIP);
+  });
+
+  it('is not floored back up to its minimum', () => {
+    // The bug this ordering exists to prevent: the per-rail
+    // `Math.max(min.left, …)` would turn 44 into 268.
+    expect(clamp({ left: 'collapsed' }).left).toBeLessThan(COMFORTABLE.left);
+  });
+
+  it('ignores a stored width rather than consuming it', () => {
+    // Collapse is not a resize. The stored width must survive to be
+    // restored on expand, so it must not leak into the painted number.
+    expect(clamp({ left: 'collapsed', storedLeft: 400 }).left).toBe(RAIL_STRIP);
+  });
+
+  it('leaves the other rail at its stored width', () => {
+    expect(clamp({ left: 'collapsed', storedRight: 400 }).right).toBe(400);
+  });
+
+  it('leaves the stage everything but the two strips when both collapse', () => {
+    const widths = clamp({ left: 'collapsed', right: 'collapsed' });
+    expect(widths.left + widths.right).toBe(RAIL_STRIP * 2);
+  });
+
+  it('is still RAIL_STRIP in a window too narrow for two minimums', () => {
+    // The reducing branch scales *minimums* down. A strip is not a
+    // minimum and must not be scaled with them.
+    expect(clamp({ left: 'collapsed', windowWidth: 600 }).left).toBe(RAIL_STRIP);
+  });
+
+  it('lowers the window width at which the stage floor binds', () => {
+    expect(railFloorWindowWidth(COMFORTABLE, 'collapsed', 'expanded')).toBeLessThan(
+      railFloorWindowWidth(COMFORTABLE, 'expanded', 'expanded'),
+    );
   });
 });
 

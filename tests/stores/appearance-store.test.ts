@@ -288,7 +288,8 @@ describe('appearance-store — rail widths', () => {
       storedRight: useAppearanceStore.getState().railWidthRight,
       min: RAIL_MIN[useAppearanceStore.getState().density],
       windowWidth,
-      showActivityRail,
+      left: 'expanded',
+      right: showActivityRail ? 'expanded' : 'hidden',
     });
 
   const inlineLeft = () => document.body.style.getPropertyValue('--cc-rail-w-left');

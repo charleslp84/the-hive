@@ -95,7 +95,8 @@ export function useRailWidths(): RailWidths {
         storedRight: railWidthRight,
         min,
         windowWidth,
-        showActivityRail,
+        left: 'expanded',
+        right: showActivityRail ? 'expanded' : 'hidden',
       }),
     [railWidthLeft, railWidthRight, min, windowWidth, showActivityRail],
   );

@@ -465,7 +465,8 @@ function applyStoredRailWidths(
     storedRight: state.railWidthRight,
     min: RAIL_MIN[state.density],
     windowWidth: typeof window === 'undefined' ? 0 : window.innerWidth,
-    showActivityRail: true,
+    left: 'expanded',
+    right: 'expanded',
   });
 }
 
