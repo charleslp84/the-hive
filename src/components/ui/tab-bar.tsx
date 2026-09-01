@@ -143,7 +143,7 @@ export function TabBar<Id extends string>({
                   aria-hidden="true"
                   className={cn(
                     'absolute top-1 right-1 size-1.5 rounded-full',
-                    (tab.badgeTone ?? 'muted') === 'danger' ? 'bg-danger' : 'bg-muted',
+                    (tab.badgeTone ?? 'muted') === 'danger' ? 'bg-danger-solid' : 'bg-muted',
                   )}
                 />
               ) : null
