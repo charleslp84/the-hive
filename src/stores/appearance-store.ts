@@ -411,6 +411,12 @@ export function activeThemeOf(
  * switching to compact leaves it at 268px forever. So a rail sitting at its
  * default has its property *removed*, and the stylesheet — density rules
  * included — takes back over.
+ *
+ * A **collapsed** rail always takes the write branch, and that is correct: 44px
+ * is never equal to a minimum, so `isRailDefault` is false, and the stylesheet
+ * has no notion of a strip — the inline property is the only thing that can
+ * paint one. The `widths.right === 0` guard still catches the unmounted case
+ * and is untouched.
  */
 export function applyRailWidths(widths: RailWidths, min: { left: number; right: number }) {
   if (typeof document === 'undefined') return;
