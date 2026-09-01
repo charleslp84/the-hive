@@ -330,10 +330,24 @@ describe('a collapsed rail', () => {
     expect(widths.left + widths.right).toBe(RAIL_STRIP * 2);
   });
 
-  it('is still RAIL_STRIP in a window too narrow for two minimums', () => {
-    // The reducing branch scales *minimums* down. A strip is not a
-    // minimum and must not be scaled with them.
+  it('is still RAIL_STRIP at a width that fits without reducing', () => {
+    // At 600px the two rails (44 + 316 = 360) already fit the 480px budget,
+    // so this is the early-return path, not the reducing branch — it still
+    // proves a strip survives a narrow-ish window untouched.
     expect(clamp({ left: 'collapsed', windowWidth: 600 }).left).toBe(RAIL_STRIP);
+  });
+
+  it('is exempt from the reducing branch that scales the other rail down', () => {
+    // At 400px the budget is 320, but left (44, fixed) + right (316) = 360 >
+    // 320, so this genuinely reaches rule 3 — unlike the 600px case above.
+    const widths = clamp({ left: 'collapsed', windowWidth: 400 });
+
+    // Proves the exemption: the strip was not scaled...
+    expect(widths.left).toBe(RAIL_STRIP);
+    // ...while the negotiable rail was — proving the branch actually ran.
+    expect(widths.right).toBeLessThan(COMFORTABLE.right);
+    // The stage floor still holds even with a fixed rail in the mix.
+    expect(widths.left + widths.right).toBeLessThanOrEqual(400 * (1 - STAGE_MIN_FRACTION));
   });
 
   it('lowers the window width at which the stage floor binds', () => {
