@@ -11,6 +11,7 @@ import {
   isBareBack,
   isEmptyClaudePrompt,
   isNewlineChord,
+  isRailChord,
   lineMotion,
   isLineKillChord,
   type CursorContext,
@@ -287,6 +288,70 @@ describe('the back chord', () => {
     expect(
       decideTerminalKey(key({ key: 'ArrowLeft', ctrlKey: true, shiftKey: true }), PC),
     ).toBe('app-chord');
+  });
+});
+
+describe('isRailChord', () => {
+  it('claims Cmd+B and Cmd+Alt+B on macOS', () => {
+    expect(isRailChord(key({ key: 'b', metaKey: true }), true)).toBe('left');
+    expect(
+      isRailChord(key({ key: 'b', metaKey: true, altKey: true }), true),
+    ).toBe('right');
+  });
+
+  it('claims Ctrl+Shift+B and Ctrl+Shift+Alt+B elsewhere', () => {
+    expect(
+      isRailChord(key({ key: 'B', ctrlKey: true, shiftKey: true }), false),
+    ).toBe('left');
+    expect(
+      isRailChord(
+        key({ key: 'B', ctrlKey: true, shiftKey: true, altKey: true }),
+        false,
+      ),
+    ).toBe('right');
+  });
+
+  it('never claims bare Ctrl+B off macOS', () => {
+    // readline's backward-char and the tmux prefix. Taking it from a focused
+    // pty is the mistake center-stage.tsx documents making once.
+    expect(isRailChord(key({ key: 'b', ctrlKey: true }), false)).toBeNull();
+  });
+
+  it('never claims a bare b', () => {
+    expect(isRailChord(key({ key: 'b' }), true)).toBeNull();
+  });
+
+  it('does not claim Cmd+B off macOS or Ctrl+Shift+B on macOS', () => {
+    expect(isRailChord(key({ key: 'b', metaKey: true }), false)).toBeNull();
+    expect(
+      isRailChord(key({ key: 'B', ctrlKey: true, shiftKey: true }), true),
+    ).toBeNull();
+  });
+});
+
+describe('decideTerminalKey with a rail chord', () => {
+  it('returns rail-chord on macOS', () => {
+    expect(decideTerminalKey(key({ key: 'b', metaKey: true }), MAC)).toBe(
+      'rail-chord',
+    );
+  });
+
+  it('returns rail-chord elsewhere', () => {
+    expect(
+      decideTerminalKey(key({ key: 'B', ctrlKey: true, shiftKey: true }), PC),
+    ).toBe('rail-chord');
+  });
+
+  it('leaves the back chord alone', () => {
+    expect(decideTerminalKey(key({ key: '[', metaKey: true }), MAC)).toBe(
+      'app-chord',
+    );
+  });
+
+  it('leaves bare Ctrl+B to the pty off macOS', () => {
+    expect(decideTerminalKey(key({ key: 'b', ctrlKey: true }), PC)).toBe(
+      'to-pty',
+    );
   });
 });
 
