@@ -1,3 +1,4 @@
+import { FolderOpen, Kanban, Robot } from '@phosphor-icons/react';
 import type { ComponentType } from 'react';
 
 import { TabBar, tabId, type Tab } from '@components/ui/tab-bar';
@@ -39,10 +40,11 @@ export function LeftRail() {
   const askCount = useAgentAskCount();
 
   const tabs: Tab<LeftTab>[] = [
-    { id: 'projects', label: 'Projects' },
+    { id: 'projects', label: 'Projects', icon: FolderOpen },
     {
       id: 'work',
       label: 'Work',
+      icon: Kanban,
       badgeCount: ticketCount,
       badgeLabel: 'work items',
     },
@@ -55,6 +57,7 @@ export function LeftRail() {
       */
       id: 'agents',
       label: 'Agents',
+      icon: Robot,
       badgeCount: askCount,
       badgeLabel: 'agents waiting on an answer',
     },

@@ -1,3 +1,4 @@
+import { Files, GitPullRequest, Tray } from '@phosphor-icons/react';
 import type { ComponentType } from 'react';
 
 import { TabBar, tabId, type Tab } from '@components/ui/tab-bar';
@@ -41,6 +42,12 @@ export function ActivityRail() {
     {
       id: 'inbox',
       label: 'Inbox',
+      /**
+       * `Tray`, not `Bell`: the header already has a bell for this same
+       * destination, and two glyphs for one place is worse than one glyph in
+       * two places.
+       */
+      icon: Tray,
       badgeCount: unread,
       badgeLabel: 'unread notifications',
       /**
@@ -49,8 +56,8 @@ export function ActivityRail() {
        */
       badgeTone: 'danger',
     },
-    { id: 'prs', label: 'PRs' },
-    { id: 'explorer', label: 'Explorer' },
+    { id: 'prs', label: 'PRs', icon: GitPullRequest },
+    { id: 'explorer', label: 'Explorer', icon: Files },
   ];
 
   const Panel = PANELS[railTab];

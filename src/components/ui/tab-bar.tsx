@@ -1,3 +1,5 @@
+import type { Icon } from '@phosphor-icons/react';
+
 import { cn } from '@/lib/utils';
 
 import { Badge, type BadgeTone } from '@components/ui/badge';
@@ -5,6 +7,15 @@ import { Badge, type BadgeTone } from '@components/ui/badge';
 export interface Tab<Id extends string = string> {
   id: Id;
   label: string;
+  /**
+   * The tab's glyph — what it becomes when its rail collapses to a strip.
+   *
+   * Required, not optional: both tab bars in this app live in a rail that can
+   * collapse, so a tab without an icon is a tab that vanishes when its rail
+   * does. Optional would make that a runtime hole; required makes it a type
+   * error, and there are exactly six call sites.
+   */
+  icon: Icon;
   /** Rendered as a muted chip. Omitted or zero renders no badge at all. */
   badgeCount?: number;
   /**
@@ -66,6 +77,7 @@ export function TabBar<Id extends string>({
     >
       {tabs.map((tab) => {
         const selected = tab.id === active;
+        const TabIcon = tab.icon;
 
         return (
           <button
@@ -82,6 +94,7 @@ export function TabBar<Id extends string>({
                 : 'border-transparent text-subtle hover:text-ink',
             )}
           >
+            <TabIcon size={16} aria-hidden="true" />
             {tab.label}
             <Badge
               count={tab.badgeCount ?? 0}

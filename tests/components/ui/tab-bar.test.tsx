@@ -1,3 +1,4 @@
+import { Circle, Square, Triangle } from '@phosphor-icons/react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,9 +11,9 @@ import { TabBar } from '@components/ui/tab-bar';
  * the atom would have leaked domain knowledge.
  */
 const TABS = [
-  { id: 'alpha', label: 'Alpha' },
-  { id: 'beta', label: 'Beta', badgeCount: 4, badgeLabel: 'widgets' },
-  { id: 'gamma', label: 'Gamma', badgeCount: 0 },
+  { id: 'alpha', label: 'Alpha', icon: Circle },
+  { id: 'beta', label: 'Beta', badgeCount: 4, badgeLabel: 'widgets', icon: Square },
+  { id: 'gamma', label: 'Gamma', badgeCount: 0, icon: Triangle },
 ];
 
 describe('TabBar', () => {
@@ -119,6 +120,18 @@ describe('TabBar', () => {
     );
   });
 
+  /**
+   * The label is right there beside it in horizontal mode; an icon that also
+   * announced would make every tab's name say itself twice.
+   */
+  it('renders each tab icon as decoration, not as a second accessible name', () => {
+    render(<TabBar tabs={TABS} active="alpha" onSelect={vi.fn()} label="Sections" />);
+
+    const alpha = screen.getByRole('tab', { name: 'Alpha' });
+    expect(alpha.querySelector('svg')).not.toBeNull();
+    expect(alpha.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
   it('forwards a className onto the tablist', () => {
     render(
       <TabBar
@@ -144,6 +157,7 @@ describe('TabBar', () => {
           {
             id: 'delta',
             label: 'Delta',
+            icon: Circle,
             badgeCount: 3,
             badgeLabel: 'blocked things',
             badgeTone: 'danger',
