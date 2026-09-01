@@ -182,3 +182,101 @@ describe('TabBar', () => {
     expect(screen.getByText('4').parentElement).toHaveClass('bg-chip');
   });
 });
+
+describe('strip orientation', () => {
+  it('renders icon-only buttons that still have accessible names', () => {
+    render(
+      <TabBar
+        tabs={TABS}
+        active="alpha"
+        onSelect={vi.fn()}
+        label="Sections"
+        orientation="strip"
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Alpha' })).toBeInTheDocument();
+    expect(screen.queryByText('Alpha')).toBeNull();
+  });
+
+  it('keeps a badge count in the accessible name', () => {
+    // A count chip does not fit 44px, but the unread count is the reason
+    // the rail is worth looking at — losing it to a collapse would defeat
+    // the feature. So it becomes a dot, and the number goes to the label.
+    render(
+      <TabBar
+        tabs={TABS}
+        active="alpha"
+        onSelect={vi.fn()}
+        label="Sections"
+        orientation="strip"
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Beta, 4 widgets' })).toBeInTheDocument();
+  });
+
+  it('renders no dot for a zero count', () => {
+    render(
+      <TabBar
+        tabs={TABS}
+        active="alpha"
+        onSelect={vi.fn()}
+        label="Sections"
+        orientation="strip"
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Gamma' })).toBeInTheDocument();
+  });
+});
+
+describe('onActiveSelect', () => {
+  it('fires on the active tab and does not call onSelect', async () => {
+    const onSelect = vi.fn();
+    const onActiveSelect = vi.fn();
+    render(
+      <TabBar
+        tabs={TABS}
+        active="alpha"
+        onSelect={onSelect}
+        onActiveSelect={onActiveSelect}
+        label="Sections"
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }));
+
+    expect(onActiveSelect).toHaveBeenCalledOnce();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('fires onSelect on a different tab and not onActiveSelect', async () => {
+    const onSelect = vi.fn();
+    const onActiveSelect = vi.fn();
+    render(
+      <TabBar
+        tabs={TABS}
+        active="alpha"
+        onSelect={onSelect}
+        onActiveSelect={onActiveSelect}
+        label="Sections"
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: /Beta/ }));
+
+    expect(onSelect).toHaveBeenCalledWith('beta');
+    expect(onActiveSelect).not.toHaveBeenCalled();
+  });
+
+  it('still calls onSelect on the active tab when no onActiveSelect is given', async () => {
+    // Every existing caller passes only onSelect and must be unaffected.
+    const onSelect = vi.fn();
+    render(<TabBar tabs={TABS} active="alpha" onSelect={onSelect} label="Sections" />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }));
+
+    expect(onSelect).toHaveBeenCalledWith('alpha');
+  });
+});

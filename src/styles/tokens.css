@@ -315,6 +315,13 @@ body[data-theme='light'] {
   --color-brand-fill-hover: var(--cc-brand-fill-hover);
   --color-brand-fill-strong: var(--cc-brand-fill-strong);
   --color-on-brand: var(--cc-on-brand);
+  /**
+   * `bg-danger` for the strip's badge dot (story 105) — the collapsed rail has
+   * no room for a chip, so the count becomes a dot instead. Same value as
+   * `--color-danger-solid`, not a new hue: one danger colour, two utility
+   * names for the two shapes it fills.
+   */
+  --color-danger: var(--cc-danger-solid);
   --color-danger-solid: var(--cc-danger-solid);
   --color-on-danger: var(--cc-on-danger);
   /**

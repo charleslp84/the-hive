@@ -45,6 +45,21 @@ interface TabBarProps<Id extends string> {
   onSelect: (id: Id) => void;
   /** Names the tablist for screen readers — e.g. `'Rail sections'`. */
   label: string;
+  /**
+   * `strip` is what a collapsed rail renders: a vertical column of icon-only
+   * buttons, no labels, no bottom rule, the active one marked with a bar on
+   * the outer edge rather than an underline.
+   */
+  orientation?: 'horizontal' | 'strip';
+  /**
+   * A click on the tab that is *already* active.
+   *
+   * A second callback rather than a widened `onSelect`, because `onSelect`
+   * firing only for a genuine change is what every existing caller relies on —
+   * and what stops a click on the current tab from writing the state it already
+   * holds. The rails pass `toggleRailCollapsed` here; nobody else passes it.
+   */
+  onActiveSelect?: () => void;
   className?: string;
 }
 
@@ -67,17 +82,35 @@ export function TabBar<Id extends string>({
   active,
   onSelect,
   label,
+  orientation = 'horizontal',
+  onActiveSelect,
   className,
 }: TabBarProps<Id>) {
+  const strip = orientation === 'strip';
+
   return (
     <div
       role="tablist"
       aria-label={label}
-      className={cn('flex gap-0.5 border-b border-border-soft', className)}
+      aria-orientation={strip ? 'vertical' : 'horizontal'}
+      className={cn(
+        'flex gap-0.5',
+        strip ? 'flex-col items-center' : 'border-b border-border-soft',
+        className,
+      )}
     >
       {tabs.map((tab) => {
         const selected = tab.id === active;
         const TabIcon = tab.icon;
+        const count = tab.badgeCount ?? 0;
+
+        /*
+          The count reaches a screen reader through the name in strip mode,
+          because the visible chip is gone. `Badge` carries it in horizontal
+          mode, so doubling it up here would announce it twice.
+        */
+        const stripName =
+          count > 0 && tab.badgeLabel ? `${tab.label}, ${count} ${tab.badgeLabel}` : tab.label;
 
         return (
           <button
@@ -86,21 +119,40 @@ export function TabBar<Id extends string>({
             role="tab"
             id={tabId(tab.id)}
             aria-selected={selected}
-            onClick={() => onSelect(tab.id)}
-            className={cn(
-              '-mb-px flex items-center gap-1.5 border-b-2 px-2.5 pt-1.5 pb-[9px] text-[11px] font-semibold uppercase tracking-[0.08em]',
-              selected
-                ? 'border-brand text-ink'
-                : 'border-transparent text-subtle hover:text-ink',
-            )}
+            aria-label={strip ? stripName : undefined}
+            onClick={() => (selected && onActiveSelect ? onActiveSelect() : onSelect(tab.id))}
+            className={
+              strip
+                ? cn(
+                    'relative flex size-[34px] items-center justify-center rounded-md',
+                    selected ? 'bg-hover text-ink' : 'text-subtle hover:bg-hover hover:text-ink',
+                  )
+                : cn(
+                    '-mb-px flex items-center gap-1.5 border-b-2 px-2.5 pt-1.5 pb-[9px] text-[11px] font-semibold uppercase tracking-[0.08em]',
+                    selected
+                      ? 'border-brand text-ink'
+                      : 'border-transparent text-subtle hover:text-ink',
+                  )
+            }
           >
-            <TabIcon size={16} aria-hidden="true" />
-            {tab.label}
-            <Badge
-              count={tab.badgeCount ?? 0}
-              tone={tab.badgeTone ?? 'muted'}
-              label={tab.badgeLabel}
-            />
+            <TabIcon size={strip ? 20 : 16} aria-hidden="true" />
+
+            {strip ? (
+              count > 0 ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'absolute top-1 right-1 size-1.5 rounded-full',
+                    (tab.badgeTone ?? 'muted') === 'danger' ? 'bg-danger' : 'bg-muted',
+                  )}
+                />
+              ) : null
+            ) : (
+              <>
+                {tab.label}
+                <Badge count={count} tone={tab.badgeTone ?? 'muted'} label={tab.badgeLabel} />
+              </>
+            )}
           </button>
         );
       })}
