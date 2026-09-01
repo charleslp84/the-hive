@@ -9,7 +9,7 @@ import { ModelChip } from '@components/layout/model-chip';
 import { StatusCounts } from '@components/layout/status-counts';
 import { Badge } from '@components/ui/badge';
 import { isDesktop } from '@config/runtime';
-import { useTheme, useThemeActions } from '@stores/appearance-store';
+import { useSetRailCollapsed, useTheme, useThemeActions } from '@stores/appearance-store';
 import { useUnreadCount } from '@stores/hive-store';
 import {
   usePickerActions,
@@ -67,8 +67,18 @@ export function Header() {
   const { toggleTheme } = useThemeActions();
   const unread = useUnreadCount();
   const revealRailTab = useRevealRailTab();
-  // Named rather than inlined, so the bell's JSX reads as what it does.
-  const showInbox = () => revealRailTab('inbox');
+  const setRailCollapsed = useSetRailCollapsed();
+  /*
+    Named rather than inlined, so the bell's JSX reads as what it does — and
+    because it is now two actions, not one. `revealRailTab` lives in `ui-store`
+    and collapse in `appearance-store`; no store may read another, so a caller
+    that wants both says both. Without the second call the bell would select the
+    Inbox tab on a rail showing three icons: visibly nothing happening.
+  */
+  const showInbox = () => {
+    revealRailTab('inbox');
+    setRailCollapsed('right', false);
+  };
   const { openPicker } = usePickerActions();
   const { openSettings } = useSettingsActions();
 

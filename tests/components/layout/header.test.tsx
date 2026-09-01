@@ -241,6 +241,21 @@ describe('Header', () => {
         screen.getByRole('button', { name: 'Inbox — nothing unread' }),
       ).toBeInTheDocument();
     });
+
+    /**
+     * On a collapsed rail, `revealRailTab` alone selects a tab nobody can see —
+     * visibly nothing happens. The bell must also clear the collapse flag.
+     */
+    it('un-collapses the activity rail when the bell is clicked', async () => {
+      const user = userEvent.setup();
+      useAppearanceStore.getState().setRailCollapsed('right', true);
+
+      render(<Header />);
+      await user.click(screen.getByRole('button', { name: /inbox/i }));
+
+      expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+      expect(useUiStore.getState().railTab).toBe('inbox');
+    });
   });
 
   describe('New session', () => {

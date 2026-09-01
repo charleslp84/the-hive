@@ -4,6 +4,7 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ActivityRail } from '@components/layout/activity-rail';
+import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { notif } from '../../support/notifications';
@@ -15,6 +16,7 @@ const panel = (container: HTMLElement, name: string) =>
 beforeEach(() => {
   useHiveStore.getState().reset();
   useUiStore.getState().reset();
+  useAppearanceStore.getState().reset();
 });
 
 describe('ActivityRail', () => {
@@ -118,5 +120,35 @@ describe('ActivityRail', () => {
 
     expect(screen.getByRole('tab', { name: /Inbox/ })).toHaveTextContent('3');
     expect(screen.getByRole('tab', { name: /PRs/ })).not.toHaveTextContent(/\d/);
+  });
+
+  describe('collapsed', () => {
+    it('renders the strip instead of the panel', () => {
+      useAppearanceStore.getState().setRailCollapsed('right', true);
+
+      render(<ActivityRail />);
+
+      // The unread count is 0 after a fresh reset, so the strip button's name
+      // is the bare label — no badge suffix to match against.
+      expect(screen.getByRole('tab', { name: 'Inbox' })).toBeInTheDocument();
+      expect(screen.queryByRole('tabpanel')).toBeNull();
+    });
+
+    it('expands when a strip tab is clicked, and selects it', async () => {
+      useAppearanceStore.getState().setRailCollapsed('right', true);
+
+      render(<ActivityRail />);
+      await userEvent.click(screen.getByRole('tab', { name: /Explorer/ }));
+
+      expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
+      expect(useUiStore.getState().railTab).toBe('explorer');
+    });
+
+    it('collapses when the active tab is clicked while expanded', async () => {
+      render(<ActivityRail />);
+      await userEvent.click(screen.getByRole('tab', { name: /Inbox/ }));
+
+      expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);
+    });
   });
 });
