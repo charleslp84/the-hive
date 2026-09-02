@@ -130,6 +130,30 @@ describe('Header', () => {
       expect(controls).not.toHaveClass('w-[calc(var(--cc-rail-w-right)-1rem)]');
     });
 
+    /**
+     * A **collapsed** rail paints `--cc-rail-w-right` at 44px — one icon's
+     * worth of strip, not a panel. Claiming that as the cluster's own column
+     * would size a `shrink-0` box (~262px of buttons) down to 28px of usable
+     * width, and the buttons cannot shrink — they overflow onto the counts
+     * beside them. So collapse must take the same flush-right fallback as an
+     * unmounted rail, not the claimed-column branch.
+     *
+     * This only proves anything if it can tell "claims the column" apart from
+     * "does not" — the class assertion mirrors the one two tests up that
+     * pins the *expanded* case, so a regression that goes back to always
+     * claiming the column fails this one the same way it would fail that one
+     * in reverse.
+     */
+    it('drops that width when the activity rail is collapsed, not just hidden', () => {
+      useUiStore.setState({ activeTab: 'hero-refresh', showActivityRail: true });
+      useAppearanceStore.getState().setRailCollapsed('right', true);
+
+      render(<Header />);
+
+      const controls = screen.getByRole('banner').children[2];
+      expect(controls).not.toHaveClass('w-[calc(var(--cc-rail-w-right)-1rem)]');
+    });
+
     it('gives the brand exactly the rail’s width, so the chips start on its edge', () => {
       useUiStore.setState({ activeTab: 'hero-refresh' });
 
