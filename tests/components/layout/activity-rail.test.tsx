@@ -4,6 +4,7 @@ import { act } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ActivityRail } from '@components/layout/activity-rail';
+import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -122,11 +123,23 @@ describe('ActivityRail', () => {
     expect(screen.getByRole('tab', { name: /PRs/ })).not.toHaveTextContent(/\d/);
   });
 
+  /**
+   * A collapsed rail renders its `TabBar` in strip orientation, which wraps
+   * each button in a Radix `Tooltip`. Radix throws if a `Tooltip` renders
+   * without an ambient `TooltipProvider`, and `ActivityRail` mounts none
+   * itself — that provider lives once, at the app root (`app.tsx`), not on
+   * every component that happens to use a tooltip. So every render in this
+   * block needs its own, same as `App` gives it for free in production.
+   */
   describe('collapsed', () => {
     it('renders the strip instead of the panel', () => {
       useAppearanceStore.getState().setRailCollapsed('right', true);
 
-      render(<ActivityRail />);
+      render(
+        <TooltipProvider>
+          <ActivityRail />
+        </TooltipProvider>,
+      );
 
       // The unread count is 0 after a fresh reset, so the strip button's name
       // is the bare label — no badge suffix to match against.
@@ -137,7 +150,11 @@ describe('ActivityRail', () => {
     it('expands when a strip tab is clicked, and selects it', async () => {
       useAppearanceStore.getState().setRailCollapsed('right', true);
 
-      render(<ActivityRail />);
+      render(
+        <TooltipProvider>
+          <ActivityRail />
+        </TooltipProvider>,
+      );
       await userEvent.click(screen.getByRole('tab', { name: /Explorer/ }));
 
       expect(useAppearanceStore.getState().railCollapsedRight).toBe(false);
@@ -145,7 +162,13 @@ describe('ActivityRail', () => {
     });
 
     it('collapses when the active tab is clicked while expanded', async () => {
-      render(<ActivityRail />);
+      // Starts expanded (horizontal, no tooltip yet) and collapses to the
+      // strip mid-test, so the provider still has to be present up front.
+      render(
+        <TooltipProvider>
+          <ActivityRail />
+        </TooltipProvider>,
+      );
       await userEvent.click(screen.getByRole('tab', { name: /Inbox/ }));
 
       expect(useAppearanceStore.getState().railCollapsedRight).toBe(true);

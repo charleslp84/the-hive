@@ -3,6 +3,7 @@ import type { Icon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
 import { Badge, type BadgeTone } from '@components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@components/ui/tooltip';
 
 export interface Tab<Id extends string = string> {
   id: Id;
@@ -60,6 +61,16 @@ interface TabBarProps<Id extends string> {
    * holds. The rails pass `toggleRailCollapsed` here; nobody else passes it.
    */
   onActiveSelect?: () => void;
+  /**
+   * Which way a strip tab's tooltip opens. Only meaningful in `strip`
+   * orientation — an expanded tab has a visible label and gets no tooltip.
+   *
+   * A rail on the left edge opens its tooltips rightward, into the screen; a
+   * rail on the right edge opens leftward, for the same reason. Getting this
+   * backwards runs the tooltip off-screen, which is invisible in a unit test
+   * and only shows up in a real browser — see `rail-collapse.spec.ts`.
+   */
+  tooltipSide?: 'left' | 'right';
   className?: string;
 }
 
@@ -84,6 +95,7 @@ export function TabBar<Id extends string>({
   label,
   orientation = 'horizontal',
   onActiveSelect,
+  tooltipSide,
   className,
 }: TabBarProps<Id>) {
   const strip = orientation === 'strip';
@@ -112,9 +124,12 @@ export function TabBar<Id extends string>({
         const stripName =
           count > 0 && tab.badgeLabel ? `${tab.label}, ${count} ${tab.badgeLabel}` : tab.label;
 
-        return (
+        const button = (
           <button
-            key={tab.id}
+            // Only the strip branch below needs a key of its own (on the
+            // `Tooltip` it returns); giving this one too would either be
+            // redundant or, worse, collide as a duplicate key in the DOM.
+            key={strip ? undefined : tab.id}
             type="button"
             role="tab"
             id={tabId(tab.id)}
@@ -154,6 +169,22 @@ export function TabBar<Id extends string>({
               </>
             )}
           </button>
+        );
+
+        /*
+          Strip only: an expanded tab already shows its label and needs no
+          tooltip. The tooltip's text is `stripName` — the very string already
+          passed to `aria-label` above, not a second one computed for display,
+          so the tooltip can never say something different from what a screen
+          reader announces.
+        */
+        return strip ? (
+          <Tooltip key={tab.id}>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent side={tooltipSide}>{stripName}</TooltipContent>
+          </Tooltip>
+        ) : (
+          button
         );
       })}
     </div>

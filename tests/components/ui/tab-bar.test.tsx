@@ -1,9 +1,10 @@
 import { Circle, Square, Triangle } from '@phosphor-icons/react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TabBar } from '@components/ui/tab-bar';
+import { TooltipProvider } from '@components/ui/tooltip';
 
 /**
  * Deliberately non-Hive fixtures. `TabBar` is reused by the left rail (030) and
@@ -186,13 +187,15 @@ describe('TabBar', () => {
 describe('strip orientation', () => {
   it('renders icon-only buttons that still have accessible names', () => {
     render(
-      <TabBar
-        tabs={TABS}
-        active="alpha"
-        onSelect={vi.fn()}
-        label="Sections"
-        orientation="strip"
-      />,
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
     );
 
     expect(screen.getByRole('tab', { name: 'Alpha' })).toBeInTheDocument();
@@ -204,13 +207,15 @@ describe('strip orientation', () => {
     // the rail is worth looking at — losing it to a collapse would defeat
     // the feature. So it becomes a dot, and the number goes to the label.
     render(
-      <TabBar
-        tabs={TABS}
-        active="alpha"
-        onSelect={vi.fn()}
-        label="Sections"
-        orientation="strip"
-      />,
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
     );
 
     expect(screen.getByRole('tab', { name: 'Beta, 4 widgets' })).toBeInTheDocument();
@@ -218,16 +223,132 @@ describe('strip orientation', () => {
 
   it('renders no dot for a zero count', () => {
     render(
-      <TabBar
-        tabs={TABS}
-        active="alpha"
-        onSelect={vi.fn()}
-        label="Sections"
-        orientation="strip"
-      />,
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
     );
 
     expect(screen.getByRole('tab', { name: 'Gamma' })).toBeInTheDocument();
+  });
+});
+
+describe('strip tooltips', () => {
+  /**
+   * `TooltipTrigger asChild` clones its child rather than wrapping it in a
+   * fresh element, so the trigger's own `data-slot` lands directly on the tab
+   * button instead of on some wrapper `getByRole('tab', …)` would then have to
+   * see through. Asserting the attribute on the button itself is what proves
+   * `asChild` was used correctly — the regression this guards against
+   * (forgetting `asChild`) would nest the button inside a second, real
+   * `<button>` and break every `getByRole('tab', …)` query in this suite and
+   * in the rail tests.
+   */
+  it('wraps a strip tab directly in a tooltip trigger, adding no wrapper element', () => {
+    render(
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Alpha' })).toHaveAttribute(
+      'data-slot',
+      'tooltip-trigger',
+    );
+  });
+
+  /**
+   * A horizontal tab has a visible label right beside it — a tooltip would be
+   * redundant, and this is the other half of the "strip mode only" contract.
+   */
+  it('leaves a horizontal tab unwrapped', () => {
+    render(
+      <TabBar tabs={TABS} active="alpha" onSelect={vi.fn()} label="Sections" />,
+    );
+
+    expect(
+      screen.getByRole('tab', { name: 'Alpha' }),
+    ).not.toHaveAttribute('data-slot');
+  });
+
+  /**
+   * Radix only mounts `TooltipContent` once its `Tooltip` is open, and opening
+   * on hover is real pointer/timer behaviour `happy-dom` cannot lay out —
+   * that case belongs to `rail-collapse.spec.ts` (Playwright), not here.
+   * Focus opens a tooltip too (the keyboard-accessible path, and the same one
+   * `TooltipTrigger` wires up with no delay), so it is what a plumbing-only
+   * unit test can drive without touching positioning or timing.
+   */
+  it('gives the tooltip the same text as the accessible name', () => {
+    render(
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.focus(screen.getByRole('tab', { name: 'Alpha' }));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Alpha');
+  });
+
+  it('gives the tooltip the badge-count form of the name, matching the label exactly', () => {
+    render(
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+        />
+      </TooltipProvider>,
+    );
+
+    const beta = screen.getByRole('tab', { name: 'Beta, 4 widgets' });
+    fireEvent.focus(beta);
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent(
+      beta.getAttribute('aria-label') ?? '',
+    );
+  });
+
+  /**
+   * `tooltipSide` is the whole reason a rail on the right edge does not run
+   * its tooltip off the screen (`rail-collapse.spec.ts` proves it visually);
+   * here it is enough to confirm the prop actually reaches `TooltipContent`.
+   */
+  it('opens toward the requested side', () => {
+    render(
+      <TooltipProvider>
+        <TabBar
+          tabs={TABS}
+          active="alpha"
+          onSelect={vi.fn()}
+          label="Sections"
+          orientation="strip"
+          tooltipSide="left"
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.focus(screen.getByRole('tab', { name: 'Alpha' }));
+    expect(screen.getByRole('tooltip')).toHaveAttribute('data-side', 'left');
   });
 });
 

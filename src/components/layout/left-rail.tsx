@@ -97,6 +97,9 @@ export function LeftRail() {
         }}
         onActiveSelect={() => toggleRailCollapsed('left')}
         orientation={railCollapsedLeft ? 'strip' : 'horizontal'}
+        // The left edge of the screen: a strip tooltip opens rightward, into
+        // the window, rather than off the left edge.
+        tooltipSide="right"
         label="Rail sections"
         className="shrink-0"
       />

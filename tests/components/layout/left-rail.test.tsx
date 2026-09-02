@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { LeftRail } from '@components/layout/left-rail';
+import { TooltipProvider } from '@components/ui/tooltip';
 import { useAppearanceStore } from '@stores/appearance-store';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
@@ -125,11 +126,23 @@ describe('LeftRail', () => {
     expect(rail()).toHaveClass('w-[var(--cc-rail-w-left)]', 'shrink-0');
   });
 
+  /**
+   * A collapsed rail renders its `TabBar` in strip orientation, which wraps
+   * each button in a Radix `Tooltip`. Radix throws if a `Tooltip` renders
+   * without an ambient `TooltipProvider`, and `LeftRail` mounts none itself —
+   * that provider lives once, at the app root (`app.tsx`), not on every
+   * component that happens to use a tooltip. So every render in this block
+   * needs its own, same as `App` gives it for free in production.
+   */
   describe('collapsed', () => {
     it('renders the strip instead of the panel', () => {
       useAppearanceStore.getState().setRailCollapsed('left', true);
 
-      render(<LeftRail />);
+      render(
+        <TooltipProvider>
+          <LeftRail />
+        </TooltipProvider>,
+      );
 
       expect(screen.getByRole('tab', { name: 'Projects' })).toBeInTheDocument();
       expect(screen.queryByRole('tabpanel')).toBeNull();
@@ -140,7 +153,11 @@ describe('LeftRail', () => {
       // with a different icon highlighted would read as broken.
       useAppearanceStore.getState().setRailCollapsed('left', true);
 
-      render(<LeftRail />);
+      render(
+        <TooltipProvider>
+          <LeftRail />
+        </TooltipProvider>,
+      );
       await userEvent.click(screen.getByRole('tab', { name: 'Agents' }));
 
       expect(useAppearanceStore.getState().railCollapsedLeft).toBe(false);
@@ -148,7 +165,13 @@ describe('LeftRail', () => {
     });
 
     it('collapses when the active tab is clicked while expanded', async () => {
-      render(<LeftRail />);
+      // Starts expanded (horizontal, no tooltip yet) and collapses to the
+      // strip mid-test, so the provider still has to be present up front.
+      render(
+        <TooltipProvider>
+          <LeftRail />
+        </TooltipProvider>,
+      );
       await userEvent.click(screen.getByRole('tab', { name: /Projects/ }));
 
       expect(useAppearanceStore.getState().railCollapsedLeft).toBe(true);

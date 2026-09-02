@@ -54,3 +54,67 @@ test('the collapsed rail still opens a panel when a strip icon is clicked', asyn
   await expect(rail.getByRole('tabpanel')).toBeVisible();
   await expect(rail).not.toHaveCSS('width', '44px');
 });
+
+/**
+ * A collapsed rail's icon strip loses every visible label — the whole reason
+ * `TabBar` gives each strip button an `aria-label` (`stripName`) in the first
+ * place. A tooltip is what gets that name back under a pointer, and Radix
+ * positions it through a portal and drives it on real pointer/timer
+ * behaviour, which `happy-dom` cannot lay out — see the unit tests in
+ * `tab-bar.test.tsx` for the plumbing this closes the gap on: the strip
+ * button really is a tooltip trigger, and the tooltip's text really is
+ * `stripName`.
+ */
+test('hovering a collapsed strip icon shows its label as a tooltip', async ({ page }) => {
+  await page.goto('/?sim=0');
+
+  const rail = page.getByRole('navigation', { name: 'Projects, work, and agents' });
+
+  // The left rail's default tab is `projects`; clicking it while active
+  // collapses the rail (same gesture as the first test above).
+  await page.getByRole('tab', { name: /Projects/ }).click();
+  await expect(rail).toHaveCSS('width', '44px');
+
+  await rail.getByRole('tab', { name: /Work/ }).hover();
+
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(/Work/);
+});
+
+/**
+ * The activity rail sits on the right edge of the window. `left-rail.tsx`
+ * passes `tooltipSide="right"` and `activity-rail.tsx` passes
+ * `tooltipSide="left"` for exactly this reason: a tooltip opening the same
+ * direction on both rails would run one of them off-screen. That is a claim
+ * about *position*, not just presence, so it belongs here rather than in
+ * `tab-bar.test.tsx` — happy-dom has no layout to get it wrong or right in.
+ */
+test('the activity rail opens its strip tooltip inward, away from the screen edge', async ({
+  page,
+}) => {
+  await page.goto('/?sim=0');
+
+  const rail = page.getByRole('complementary', { name: 'Activity' });
+
+  // The activity rail's default tab is `inbox`; clicking it while active
+  // collapses the rail, same gesture as the left rail.
+  await page.getByRole('tab', { name: /Inbox/ }).click();
+  await expect(rail).toHaveCSS('width', '44px');
+
+  const trigger = rail.getByRole('tab', { name: /Explorer/ });
+  await trigger.hover();
+
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toHaveText(/Explorer/);
+
+  const triggerBox = (await trigger.boundingBox())!;
+  const tooltipBox = (await tooltip.boundingBox())!;
+
+  // Opened leftward: the tooltip sits to the left of its trigger, not to the
+  // right — where it would run past the window's right edge.
+  expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(triggerBox.x + 1);
+  // And it never leaves the viewport on the side it opened toward.
+  expect(tooltipBox.x).toBeGreaterThanOrEqual(0);
+});
