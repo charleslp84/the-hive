@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { selectRailTab } from './fixtures/rail-tabs';
+import { selectRailTab } from '../fixtures/rail-tabs';
 
 /**
  * Overscroll-to-refresh, driven by a real wheel.

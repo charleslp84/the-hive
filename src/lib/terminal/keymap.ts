@@ -119,6 +119,13 @@ export interface KeyEventLike {
    * case without it. See the AltGr note in {@link decideTerminalKey}.
    */
   altKey?: boolean;
+  /**
+   * The physical key, layout- and modifier-independent — `event.code` on a
+   * real `KeyboardEvent`. Optional so callers and tests that construct a bare
+   * object with only `key` still compile; see {@link isRailChord} for why it
+   * is worth having at all.
+   */
+  code?: string;
 }
 
 /**
@@ -177,21 +184,37 @@ export function isBackChord(event: KeyEventLike, isMac: boolean): boolean {
  * `center-stage.tsx` documents making once with `Cmd+←`. `Alt` distinguishes
  * the two rails on both platforms, matching what VS Code does with its
  * secondary side bar.
+ *
+ * **Matches the physical key, not the character `event.key` reports.** Both
+ * chords involve `Alt`, and with `Alt` held some platforms and layouts produce
+ * a character other than `"b"` — Option+B alone gives `"∫"` on a macOS US
+ * keyboard, and there is no guarantee every layout reporting `Alt`+`Meta`
+ * together keeps `key` un-remapped. `event.code === 'KeyB'` names the physical
+ * key regardless of modifiers or layout, so it is the test used whenever the
+ * event carries one; `key` is the fallback for the rest — a bare object built
+ * without `code`, which every existing caller and test still constructs.
+ *
+ * The emptiness check, not `!== undefined`: a real `KeyboardEvent` always has
+ * a `code` property, `''` when the caller never set one (every synthetic
+ * `new KeyboardEvent(...)` in this codebase's own tests included) — so testing
+ * for `undefined` alone would treat that `''` as a real, non-matching code and
+ * never fall back to `key` for exactly the events most likely to omit it.
  */
 export function isRailChord(
   event: KeyEventLike,
   isMac: boolean,
 ): 'left' | 'right' | null {
   const side = event.altKey === true ? 'right' : 'left';
+  const isB = event.code ? event.code === 'KeyB' : event.key.toLowerCase() === 'b';
 
   if (isMac) {
-    if (event.key.toLowerCase() !== 'b' || !event.metaKey || event.ctrlKey || event.shiftKey) {
+    if (!isB || !event.metaKey || event.ctrlKey || event.shiftKey) {
       return null;
     }
     return side;
   }
 
-  if (event.key.toLowerCase() !== 'b' || !event.ctrlKey || !event.shiftKey || event.metaKey) {
+  if (!isB || !event.ctrlKey || !event.shiftKey || event.metaKey) {
     return null;
   }
   return side;

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { PHRASES } from '../../../src/lib/swarm/phrases';
-import { selectRailTab } from './fixtures/rail-tabs';
+import { selectRailTab } from '../fixtures/rail-tabs';
 
 /**
  * The swarm layer, in a real browser against production output.

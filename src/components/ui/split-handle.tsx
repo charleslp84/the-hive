@@ -205,6 +205,40 @@ export function SplitHandle({
 
         if (tookCollapse(to)) return;
 
+        /*
+          The keyboard's own route to collapse, mirroring the stop the drag
+          already has: a rail already at its floor has nowhere further to
+          shrink *to*, so `clamp` below would just return `value` again and the
+          key would silently do nothing forever. `tookCollapse` alone cannot
+          catch this — its raw threshold sits *below* `min`, a reading the
+          keyboard can never produce because `clamp` never lets `value` fall
+          there in the first place.
+
+          `to < value` is the direction-agnostic way to ask "is this press
+          trying to shrink further?": `sign` has already been folded into `to`
+          by the caller, so it reads the same way for `px-from-start`'s
+          ArrowLeft and `px-from-end`'s inverted ArrowRight.
+
+          `min < max` excludes the one state where `value <= min` is true for a
+          reason that has nothing to do with a floor: a window too narrow for
+          the rail's own minimum, where `use-rail-widths.ts`'s `bounds` reduces
+          `min` (and `max` right along with it) to the single width that still
+          fits. There `min === max === value` — the whole range has collapsed
+          to a point, not stopped at an edge — and the key is correctly inert,
+          the same "no room to move" outcome the effective-minimum fix already
+          established. A genuine floor always leaves `max` well above `min`.
+        */
+        if (
+          collapseBelow !== undefined &&
+          onCollapse !== undefined &&
+          min < max &&
+          value <= min &&
+          to < value
+        ) {
+          onCollapse();
+          return;
+        }
+
         const next = clamp(to);
         /*
           A key that cannot move the value must not report one. Where the bounds
@@ -229,7 +263,19 @@ export function SplitHandle({
         move(value + step * sign);
       }
     },
-    [clamp, onValue, scale, step, tookCollapse, value, vertical],
+    [
+      clamp,
+      collapseBelow,
+      max,
+      min,
+      onCollapse,
+      onValue,
+      scale,
+      step,
+      tookCollapse,
+      value,
+      vertical,
+    ],
   );
 
   /*

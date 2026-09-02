@@ -327,6 +327,33 @@ describe('isRailChord', () => {
       isRailChord(key({ key: 'B', ctrlKey: true, shiftKey: true }), true),
     ).toBeNull();
   });
+
+  /**
+   * The physical key, not the character. Holding Option remaps `key` on a
+   * macOS US layout — Option+B alone reports `"∫"` — and there is no
+   * guarantee every layout leaves it un-remapped once Meta joins Alt for the
+   * right-rail chord. `event.code` names the physical key regardless, which
+   * is what a real Cmd+Alt+B keystroke carries.
+   */
+  it('claims Cmd+Alt+B on macOS by its physical key even when Alt remaps the character', () => {
+    expect(
+      isRailChord(key({ key: '∫', code: 'KeyB', altKey: true, metaKey: true }), true),
+    ).toBe('right');
+  });
+
+  it('falls back to the key when code is absent', () => {
+    // Every caller that predates `code` — and every test above — builds a
+    // bare object without it, and must keep matching exactly as before.
+    expect(isRailChord(key({ key: 'b', metaKey: true }), true)).toBe('left');
+  });
+
+  it('trusts code over key when both are present and code says no match', () => {
+    // A physical key that is not B must not be rescued by a `key` that
+    // happens to read `"b"` — `code` is authoritative once it exists.
+    expect(
+      isRailChord(key({ key: 'b', code: 'KeyN', metaKey: true }), true),
+    ).toBeNull();
+  });
 });
 
 describe('decideTerminalKey with a rail chord', () => {
