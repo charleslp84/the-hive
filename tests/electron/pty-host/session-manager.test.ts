@@ -920,3 +920,65 @@ describe('exit', () => {
     expect(kinds.indexOf('data')).toBeLessThan(kinds.lastIndexOf('exit'));
   });
 });
+
+describe('foreground (terminals)', () => {
+  const TERMINAL: SpawnCommand = { ...SPAWN, sessionId: 'term-01', foreground: true };
+
+  const foregroundNames = (): (string | null)[] =>
+    sent.filter((m) => m.type === 'foreground').map((m) => m.name);
+
+  it('polls nothing for a spawn that did not ask', () => {
+    vi.useFakeTimers();
+    manager.spawn(SPAWN, emit);
+
+    pty().process = 'vim';
+    vi.advanceTimersByTime(5_000);
+
+    expect(foregroundNames()).toEqual([]);
+  });
+
+  it('reports null while the shell itself holds the tty', () => {
+    vi.useFakeTimers();
+    manager.spawn(TERMINAL, emit);
+
+    // The mock's `process` is the spawned file, `/bin/zsh`; the real getter
+    // returns the comm name `zsh`. Both must read as the prompt.
+    vi.advanceTimersByTime(1_000);
+
+    expect(foregroundNames()).toEqual([null]);
+  });
+
+  it('reports a name when something else takes the tty, and only on change', () => {
+    vi.useFakeTimers();
+    manager.spawn(TERMINAL, emit);
+    vi.advanceTimersByTime(1_000);
+
+    pty().process = 'vitest';
+    vi.advanceTimersByTime(3_000);
+    pty().process = 'zsh';
+    vi.advanceTimersByTime(1_000);
+
+    expect(foregroundNames()).toEqual([null, 'vitest', null]);
+  });
+
+  it('stops polling on exit and never emits after the exit message', () => {
+    vi.useFakeTimers();
+    manager.spawn(TERMINAL, emit);
+    vi.advanceTimersByTime(1_000);
+
+    pty().emitExit(0);
+    pty().process = 'vim';
+    vi.advanceTimersByTime(5_000);
+
+    expect(sent.at(-1)?.type).toBe('exit');
+  });
+
+  it('reads at the configured cadence', () => {
+    vi.useFakeTimers();
+    manager = build({ foregroundPollMs: 250 });
+    manager.spawn(TERMINAL, emit);
+
+    vi.advanceTimersByTime(250);
+    expect(foregroundNames()).toEqual([null]);
+  });
+});
