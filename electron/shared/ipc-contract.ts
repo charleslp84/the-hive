@@ -109,9 +109,11 @@ import type {
   SessionBranchEvent,
   SessionClearedEvent,
   SessionFinishedEvent,
+  SessionForegroundEvent,
   SessionReadyEvent,
   SessionNameEvent,
   SessionStatusEvent,
+  SessionTerminalEndedEvent,
   SessionTicketIntentEvent,
 } from './session-contract';
 import type {
@@ -627,6 +629,8 @@ export const CH = {
   ptyLost: 'pty:lost', // main → renderer
   /** Kill, wait for the exit, spawn fresh, bootstrap again (story 096). */
   ptyRestart: 'pty:restart',
+  /** A plain login shell with no Claude typed into it (terminals). */
+  ptySpawnTerminal: 'pty:spawn-terminal',
   /**
    * What a real session is doing, derived in main (story 096).
    *
@@ -718,6 +722,8 @@ export const CH = {
    * carries rate limits at all.
    */
   sessionMetrics: 'session:metrics', // main → renderer
+  sessionForeground: 'session:foreground', // main → renderer
+  sessionTerminalEnded: 'session:terminal-ended', // main → renderer
   /**
    * The fleet as it was when the app last closed (HIVE-87).
    *
@@ -964,6 +970,8 @@ export const EVENT_CHANNELS = [
   CH.sessionBranch,
   CH.sessionTicketIntent,
   CH.sessionMetrics,
+  CH.sessionForeground,
+  CH.sessionTerminalEnded,
   CH.configCloneDone,
   CH.notificationsActivate,
   CH.fsChanged,
@@ -1030,6 +1038,19 @@ export interface SpawnRequest {
    * of.
    */
   resume?: boolean;
+}
+
+/**
+ * A terminal spawn (terminals, phase 1).
+ *
+ * Four fields and no more: a terminal takes exactly one input, the project.
+ * There is no task, model, effort, name or resume — the guard refuses each.
+ */
+export interface SpawnTerminalRequest {
+  sessionId: string;
+  projectId: string;
+  cols: number;
+  rows: number;
 }
 
 export interface WriteRequest {
@@ -1616,6 +1637,7 @@ export interface HiveBridge {
   };
   pty: {
     spawn(request: SpawnRequest): Promise<void>;
+    spawnTerminal(request: SpawnTerminalRequest): Promise<void>;
     write(request: WriteRequest): void;
     resize(request: ResizeRequest): void;
     kill(sessionId: string): Promise<void>;
@@ -2073,6 +2095,10 @@ export interface HiveBridge {
      * zero.
      */
     onMetrics(callback: (event: SessionMetricsEvent) => void): () => void;
+    /** A terminal's foreground process changed (terminals). */
+    onForeground(callback: (event: SessionForegroundEvent) => void): () => void;
+    /** A terminal's shell ended, and how (terminals). */
+    onTerminalEnded(callback: (event: SessionTerminalEndedEvent) => void): () => void;
     /**
      * The fleet as it was when the app last closed (HIVE-87).
      *
@@ -2499,6 +2525,8 @@ export const BRIDGE_SESSION_KEYS = [
    * no token value.
    */
   'onMetrics',
+  'onForeground',
+  'onTerminalEnded',
   /**
    * HIVE-87's two, and the "listeners only" claim above stops being true here.
    *
@@ -2865,6 +2893,7 @@ export const BRIDGE_SERVER_KEYS = ['pair', 'revoke'] as const;
 export const BRIDGE_PTY_KEYS = [
   'ack',
   'spawn',
+  'spawnTerminal',
   'write',
   'resize',
   'kill',
