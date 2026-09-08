@@ -112,6 +112,8 @@ export interface PtySpawn {
   env: Record<string, string>;
   cols: number;
   rows: number;
+  /** Poll the foreground process group (terminals). See `SpawnCommand`. */
+  foreground?: true;
 }
 
 /** One outstanding batch, kept so an ack can release exactly its bytes. */
@@ -402,6 +404,14 @@ export function createPtyIpc(options: PtyIpcOptions): PtyIpc {
       // this session again, so the ring is dead weight on an always-on host.
       channel.replay = [];
       channel.replayBytes = 0;
+    }),
+    /**
+     * A terminal's foreground process (terminals). Forwarded keyed by the pty
+     * session id, exactly as data and exit are; `sessions/index.ts`'s
+     * `forward` translates it to the entity and drops a stale generation.
+     */
+    supervisor.onForeground((event) => {
+      send(CH.sessionForeground, { sessionId: event.sessionId, name: event.name });
     }),
   ];
 

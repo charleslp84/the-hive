@@ -170,6 +170,7 @@ function fakeSupervisor(): PtyHostSupervisor {
       emitLost = listener;
       return () => {};
     }),
+    onForeground: vi.fn(() => () => {}),
     shutdown: vi.fn(async () => {}),
     isRunning: vi.fn(() => true),
     isBlocked: vi.fn(() => blocked),
