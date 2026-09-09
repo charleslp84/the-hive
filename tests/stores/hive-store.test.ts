@@ -1159,6 +1159,24 @@ describe('hive-store', () => {
           expect(useHiveStore.getState().entities[id!]).toMatchObject({ project: 'nova-web', cwd: '/repos/nova-web' });
         });
 
+        it('uses the host project path, not the observed cwd, for a container session', () => {
+          const current = projectConfigSnapshot()!;
+          setProjectConfigForTest({
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === 'nova-web'
+                ? { ...project, container: { workspace: '/workspace', hiveDir: '/hive' } }
+                : project,
+            ),
+          });
+          const boxed = useHiveStore.getState().spawnSession('nova-web');
+          act(() => useHiveStore.getState().setSessionBranch(boxed, 'main', '/workspace'));
+
+          const id = useHiveStore.getState().spawnTerminalBeside(boxed);
+
+          expect(useHiveStore.getState().entities[id!]).toMatchObject({ cwd: '/repos/nova-web' });
+        });
+
         it('answers null for an agent and for an unknown id, opening nothing', () => {
           const before = useHiveStore.getState().order.length;
           expect(useHiveStore.getState().spawnTerminalBeside('slack-agent')).toBeNull();

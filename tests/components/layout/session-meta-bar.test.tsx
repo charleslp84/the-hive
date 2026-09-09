@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { isSession, type Session } from '@/types/entity';
 
 import { SessionMetaBar } from '@components/layout/session-meta-bar';
+import { projectConfigSnapshot, setProjectConfigForTest } from '@lib/project-config';
 import { useHiveStore } from '@stores/hive-store';
 import { useUiStore } from '@stores/ui-store';
 import { seedDemoFleet, seedDemoProjectConfig } from '@tests/support/demo-fleet';
@@ -213,6 +214,28 @@ describe('SessionMetaBar', () => {
         cwd: '/repos/nova-web/.claude/worktrees/x',
       });
       expect(useUiStore.getState().activeTab).toBe(opened);
+    });
+
+    it('names the host root for a container session, whose cwd is a container path', async () => {
+      const current = projectConfigSnapshot()!;
+      setProjectConfigForTest({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === 'nova-web'
+            ? { ...project, container: { workspace: '/workspace', hiveDir: '/hive' } }
+            : project,
+        ),
+      });
+      const id = useHiveStore.getState().spawnSession('nova-web');
+      act(() => useHiveStore.getState().setSessionBranch(id, 'main', '/workspace'));
+      render(<SessionMetaBar entity={entity(id)} />);
+
+      const control = screen.getByRole('button', { name: `Terminal here in ${id}` });
+      expect(control).toHaveAttribute('title', expect.stringMatching(/host-only/));
+      await userEvent.click(control);
+      expect(
+        useHiveStore.getState().entities[useHiveStore.getState().order.at(-1)!],
+      ).toMatchObject({ cwd: '/repos/nova-web' });
     });
 
     it('falls back to the project path before a directory is observed', async () => {

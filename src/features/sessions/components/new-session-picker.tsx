@@ -32,11 +32,8 @@ import {
 const MODELS: readonly Model[] = ['haiku', 'sonnet', 'opus', 'fable'];
 const EFFORTS: readonly Effort[] = ['low', 'medium', 'high', 'max'];
 
-/**
- * The concept pins the first four projects as one-click starts. Exported for
- * the header's terminal menu, which pins the same four.
- */
-export const PINNED_COUNT = 4;
+/** The concept pins the first four projects as one-click starts. */
+const PINNED_COUNT = 4;
 
 /**
  * The new-session picker (story 044).

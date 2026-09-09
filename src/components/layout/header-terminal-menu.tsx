@@ -7,14 +7,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@components/ui/dropdown-menu';
 import { Icon } from '@components/ui/icon';
-import { PINNED_COUNT } from '@features/sessions/components/new-session-picker';
 import { useProjectAccess, useProjectContainerised } from '@hooks/use-project-config';
 import { useProjects, useSpawnTerminal } from '@stores/hive-store';
-import { usePickerActions } from '@stores/ui-store';
 
 const item =
   'flex items-center gap-2 rounded-[4px] px-2 py-1 font-mono text-[12.5px] text-muted focus:bg-hover focus:text-ink data-[disabled]:opacity-35';
@@ -24,9 +21,10 @@ const item =
  *
  * `New session` keeps its name and its picker; this opens a terminal in a
  * project without a screen in between, because a terminal takes exactly one
- * input and a menu of projects is that input. The first four in config order
- * are pinned — the same four the picker pins — and the picker is where the
- * fifth and beyond live, since it is the only surface that can search.
+ * input and a menu of projects is that input. Every project, in config order:
+ * the picker is a *session* surface — choosing a project there spawns a
+ * Claude — so it is never the fall-through for the fifth project and beyond
+ * (#205 review). A long config scrolls inside the menu.
  *
  * The trigger's name is `Terminal in a project`: it does not begin with "new"
  * and is not an exact `New session`, so every locator that finds the button
@@ -35,7 +33,6 @@ const item =
 export function HeaderTerminalMenu() {
   const projects = useProjects();
   const spawnTerminal = useSpawnTerminal();
-  const { openPicker } = usePickerActions();
 
   return (
     <DropdownMenu>
@@ -47,18 +44,14 @@ export function HeaderTerminalMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
-        className="min-w-[13rem] rounded-[7px] border border-border bg-panel p-1 shadow-lg"
+        className="max-h-[60vh] min-w-[13rem] overflow-y-auto rounded-[7px] border border-border bg-panel p-1 shadow-lg"
       >
         <DropdownMenuLabel className="px-2 py-1 font-mono text-[10.5px] tracking-wide text-subtle uppercase">
           New terminal in…
         </DropdownMenuLabel>
-        {projects.slice(0, PINNED_COUNT).map((project) => (
+        {projects.map((project) => (
           <TerminalMenuItem key={project.id} project={project} onSelect={spawnTerminal} />
         ))}
-        <DropdownMenuSeparator className="bg-border-soft" />
-        <DropdownMenuItem onSelect={() => openPicker()} className={item}>
-          More projects…
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

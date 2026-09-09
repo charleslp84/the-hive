@@ -42,7 +42,7 @@ describe('HeaderTerminalMenu', () => {
     resetProjectConfig();
   });
 
-  it('opens a menu headed "New terminal in…" listing the first four projects in config order', async () => {
+  it('opens a menu headed "New terminal in…" listing every project in config order', async () => {
     seed(['a', 'b', 'c', 'd', 'e'].map((id) => project(id)));
     render(<HeaderTerminalMenu />);
 
@@ -50,15 +50,15 @@ describe('HeaderTerminalMenu', () => {
 
     expect(screen.getByText('New terminal in…')).toBeInTheDocument();
     const items = screen.getAllByRole('menuitem').map((item) => item.textContent);
-    expect(items).toHaveLength(5);
-    expect(items.slice(0, 4)).toEqual([
+    expect(items).toEqual([
       expect.stringContaining('a'),
       expect.stringContaining('b'),
       expect.stringContaining('c'),
       expect.stringContaining('d'),
+      expect.stringContaining('e'),
     ]);
-    expect(items[4]).toBe('More projects…');
-    expect(screen.queryByRole('menuitem', { name: /^e / })).toBeNull();
+    // Never a hand-off to the picker: choosing a project there spawns a session.
+    expect(screen.queryByRole('menuitem', { name: /more projects/i })).toBeNull();
   });
 
   it('opens a terminal in the picked project', async () => {
@@ -87,13 +87,5 @@ describe('HeaderTerminalMenu', () => {
     expect(missing).toHaveAttribute('aria-disabled', 'true');
     expect(missing).toHaveAttribute('title', expect.stringContaining('config.json'));
     expect(screen.getByRole('menuitem', { name: /boxed · host/ })).toBeInTheDocument();
-  });
-
-  it('"More projects…" opens the picker', async () => {
-    seed([project('nova-web')]);
-    render(<HeaderTerminalMenu />);
-    await open();
-    await userEvent.click(screen.getByRole('menuitem', { name: 'More projects…' }));
-    expect(useUiStore.getState().picker).toBe(true);
   });
 });

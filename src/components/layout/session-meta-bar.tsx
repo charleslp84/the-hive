@@ -10,6 +10,7 @@ import { branchLabel, entityLabel, type Session } from '@/types/entity';
 import { Chip } from '@components/ui/chip';
 import { StatusDot, statusLabel, statusText } from '@components/ui/status-dot';
 import { prStateText } from '@features/shared/pr-presentation';
+import { useProjectContainerised } from '@hooks/use-project-config';
 import { useSessionPr, useSpawnTerminalBeside } from '@stores/hive-store';
 import { useBackToOrch } from '@stores/ui-store';
 
@@ -41,6 +42,7 @@ interface SessionMetaBarProps {
 export function SessionMetaBar({ entity }: SessionMetaBarProps) {
   const backToOrch = useBackToOrch();
   const spawnTerminalBeside = useSpawnTerminalBeside();
+  const containerised = useProjectContainerised(entity.project);
   /**
    * The PR chip's subject, resolved from the live GitHub list (HIVE-100).
    *
@@ -151,7 +153,11 @@ export function SessionMetaBar({ entity }: SessionMetaBarProps) {
       <button
         type="button"
         onClick={() => spawnTerminalBeside(entity.id)}
-        title="Terminal here (⌃`)"
+        title={
+          containerised
+            ? 'Terminal at the project root on this Mac (⌃`) — this session runs in a container, and a terminal is host-only'
+            : 'Terminal here (⌃`)'
+        }
         aria-label={`Terminal here in ${entity.id}`}
         className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full bg-chip px-2.5 py-1 font-mono text-[11.5px] text-muted hover:text-ink"
       >

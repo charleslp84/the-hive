@@ -274,8 +274,8 @@ fleet status counts, theme toggle, inbox bell, New session. 56px tall, `gap-14px
 **New session is a split pill** (terminals). The button keeps its exact name
 and opens the picker; the chevron beside it is `HeaderTerminalMenu`
 (`layout/header-terminal-menu.tsx`), a radix `DropdownMenu` headed
-`New terminal in…` that lists the same four projects the picker pins, then
-`More projects…` to the picker. Its trigger is named `Terminal in a project` —
+`New terminal in…` that lists every project in config order — never a hand-off
+to the picker, which is a session surface. Its trigger is named `Terminal in a project` —
 never beginning with "new" — so a locator that finds `New session` by name
 still finds exactly one control. Both halves carry `no-drag`.
 

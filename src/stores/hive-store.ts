@@ -44,6 +44,7 @@ import { buildTicketSearchJql } from '@lib/jira-search';
 import { ledgerRows } from '@lib/ledger/console-rows';
 import {
   projectConfigSnapshot,
+  projectContainerised,
   projectPath,
   resolveProjectRef,
   subscribeProjectConfig,
@@ -457,8 +458,10 @@ interface HiveState {
   /**
    * A shell beside an entity: the same project, the same directory (entry
    * points). A session contributes its observed `cwd`, falling back to the
-   * project path where none has been observed; a terminal contributes its
-   * own. Anything else answers null and opens nothing.
+   * project path where none has been observed — or where the project is
+   * containerised, since that cwd is a container path and a terminal is
+   * host-only; a terminal contributes its own. Anything else answers null and
+   * opens nothing.
    */
   spawnTerminalBeside: (entityId: string) => string | null;
   /**
@@ -2023,7 +2026,15 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       return get().spawnTerminal(entity.project, entity.cwd === '' ? {} : { cwd: entity.cwd });
     }
     if (isSession(entity)) {
-      const cwd = entity.cwd ?? projectPath(entity.project) ?? undefined;
+      /*
+        A container session's observed `cwd` is the hook's — Claude's, inside
+        the container (`/workspace`) — and a terminal is host-only. Starting a
+        host shell there would fail on a path that does not exist, so a
+        containerised project falls back to its host path (#205 review).
+      */
+      const cwd = projectContainerised(entity.project)
+        ? (projectPath(entity.project) ?? undefined)
+        : (entity.cwd ?? projectPath(entity.project) ?? undefined);
       return get().spawnTerminal(entity.project, cwd === undefined ? {} : { cwd });
     }
     return null;
