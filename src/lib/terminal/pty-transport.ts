@@ -44,8 +44,8 @@ import type {
  * it — would put a layout concern in the transport permanently to save one
  * `SIGWINCH` once.
  */
-const DEFAULT_COLS = 80;
-const DEFAULT_ROWS = 24;
+export const DEFAULT_COLS = 80;
+export const DEFAULT_ROWS = 24;
 
 /**
  * How much output is kept per entity for a surface that subscribes late.
@@ -475,6 +475,62 @@ export function requestSpawn(
 }
 
 /**
+ * Ask main for a terminal: a login shell with no Claude typed into it (terminals).
+ *
+ * The same channel bookkeeping as {@link requestSpawn} — one request per entity,
+ * a refusal answered rather than thrown, and the refusal written into the
+ * transcript as well so an empty black rectangle never has to be explained — over
+ * the terminal verb, whose payload is the project and the geometry and nothing
+ * else. There is no task, no model and no effort to carry: those describe an
+ * agent, and a terminal has none.
+ *
+ * A sibling of `requestSpawn` rather than a flag on it. The two differ in the
+ * verb they call and in nothing else, and a boolean would put the choice between
+ * "start a shell" and "start Claude in a repository" inside an options object
+ * where a call site could pass it by accident.
+ */
+export function requestSpawnTerminal(
+  entityId: string,
+  projectId: string,
+): Promise<SpawnOutcome> {
+  // Inside the try for the reason `requestSpawn` gives: `pty()` throws when
+  // there is no bridge, and the store calls this fire-and-forget after the
+  // entity already exists.
+  let channel: EntityChannel;
+  try {
+    channel = channels.get(entityId) ?? openChannel(entityId);
+  } catch (cause) {
+    return Promise.resolve({
+      ok: false,
+      reason: cause instanceof Error ? cause.message : String(cause),
+    });
+  }
+  if (channel.spawnResult) return channel.spawnResult;
+
+  channel.spawnRequested = true;
+  channel.spawnResult = pty()
+    .spawnTerminal({
+      sessionId: entityId,
+      projectId,
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
+    })
+    .then((): SpawnOutcome => ({ ok: true }))
+    .catch((cause: unknown): SpawnOutcome => {
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      // The refusal belongs in the terminal, guarded exactly as the session
+      // path guards it — see `requestSpawn` for why both halves are here.
+      if (!channel.closed) {
+        channel.closed = true;
+        emit(channel, spawnRefused(reason));
+      }
+      return { ok: false, reason };
+    });
+
+  return channel.spawnResult;
+}
+
+/**
  * The lazy path: a surface mounted, so something had better be running.
  *
  * Fire-and-forget by design — the caller is `onData`, which must return a
@@ -575,6 +631,28 @@ export function createPtyTransport(
   return createTransport(entityId, (channel) =>
     ensureSpawned(channel, entityId, projectId, options),
   );
+}
+
+/**
+ * A terminal's transport: the pty transport, with the terminal spawn behind it
+ * (terminals).
+ *
+ * The third parameterisation of the one moment {@link createTransport} exists to
+ * vary. A session's mount starts `claude`, a clone's starts nothing, and this
+ * one starts a login shell — everything after the first byte is identical, which
+ * is why there is one factory function and three call sites rather than three
+ * copies of the replay, gap and ack machinery.
+ */
+export function createTerminalTransport(
+  entityId: string,
+  projectId: string,
+): TerminalTransport {
+  return createTransport(entityId, (channel) => {
+    // Attach-never-respawn, the same guard `ensureSpawned` applies: a tab
+    // switch back to a shell that has exited must not start a second one.
+    if (channel.spawnRequested) return;
+    void requestSpawnTerminal(entityId, projectId);
+  });
 }
 
 /**

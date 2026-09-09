@@ -27,7 +27,11 @@ import {
   setProjectConfigForTest,
 } from '@lib/project-config';
 import { noteSessionTicket } from '@lib/session-history';
-import { reopenChannel, requestSpawn } from '@lib/terminal/pty-transport';
+import {
+  reopenChannel,
+  requestSpawn,
+  requestSpawnTerminal,
+} from '@lib/terminal/pty-transport';
 import { sendToSession } from '@lib/terminal/session-input';
 
 import { useAppearanceStore } from '@stores/appearance-store';
@@ -46,9 +50,11 @@ import {
   useAgentsByGroup,
   useAgentThread,
   useDisplayName,
+  useCounts,
   useEndedSessions,
   currentRowFor,
   useHiveStore,
+  useProjectSessions,
   useIsAgentId,
   useLedgerEntries,
   useNavOrder,
@@ -85,6 +91,8 @@ vi.mock('@lib/terminal/session-input', () => ({
 
 vi.mock('@lib/terminal/pty-transport', () => ({
   requestSpawn: vi.fn(() => Promise.resolve({ ok: true })),
+  /** The same fire-and-forget bargain for a plain shell (terminals). */
+  requestSpawnTerminal: vi.fn(() => Promise.resolve({ ok: true })),
   sessionChannelState: vi.fn(() => 'live'),
   resetPtyChannels: vi.fn(),
   // HIVE-93: `resumeSession` clears the renderer's exit latch before asking
@@ -134,6 +142,7 @@ describe('hive-store', () => {
     vi.mocked(isDesktop).mockReturnValue(false);
     vi.mocked(sendToSession).mockReturnValue({ ok: true });
     vi.mocked(requestSpawn).mockResolvedValue({ ok: true });
+    vi.mocked(requestSpawnTerminal).mockResolvedValue({ ok: true });
   });
 
   describe('fixtures', () => {
@@ -3843,6 +3852,177 @@ describe('hive-store', () => {
 
       expect(useHiveStore.getState().entities['old-term']).toBeDefined();
       expect(useHiveStore.getState().entities['old-live']).toBeDefined();
+    });
+  });
+
+  /**
+   * Terminals: a session that never had `claude` typed into it.
+   *
+   * Seeded per test rather than into the demo fleet, deliberately — the fixture
+   * counts above pin `order` and `entities`, and a terminal in the fleet would
+   * make every one of them a statement about this feature.
+   */
+  describe('terminals', () => {
+    it('spawnTerminal mints term-NN, opens the tab, and asks for a plain shell on desktop', () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      const entity = useHiveStore.getState().entities[id];
+
+      expect(id).toMatch(/^term-[0-9a-z]{2,}$/u);
+      expect(entity).toMatchObject({
+        kind: 'terminal',
+        project: 'nova-web',
+        status: 'prompt',
+        lines: [],
+      });
+      // Absent, not `undefined`: the row renders `at prompt` from its absence.
+      expect(entity).not.toHaveProperty('foreground');
+      expect(useHiveStore.getState().order.at(-1)).toBe(id);
+      expect(useUiStore.getState().activeTab).toBe(id);
+      expect(requestSpawnTerminal).toHaveBeenCalledWith(id, 'nova-web');
+      // The one mistake that would put `claude` in a window opened as a shell.
+      expect(requestSpawn).not.toHaveBeenCalled();
+    });
+
+    it('spawnTerminal creates the entity in the browser but asks nothing of a bridge', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      expect(useHiveStore.getState().entities[id]?.kind).toBe('terminal');
+      expect(requestSpawnTerminal).not.toHaveBeenCalled();
+    });
+
+    it('terminal ids never collide with session ids or each other', () => {
+      const a = useHiveStore.getState().spawnTerminal('nova-web');
+      const b = useHiveStore.getState().spawnTerminal('nova-web');
+      const s = useHiveStore.getState().spawnSession('nova-web');
+
+      expect(new Set([a, b, s]).size).toBe(3);
+      expect(s.startsWith('sess-')).toBe(true);
+    });
+
+    it('a refused spawn is written to the console in red', async () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      vi.mocked(requestSpawnTerminal).mockResolvedValue({
+        ok: false,
+        reason: 'session limit reached (24)',
+      });
+
+      useHiveStore.getState().spawnTerminal('nova-web');
+
+      await vi.waitFor(() => {
+        expect(useHiveStore.getState().orchLines.at(-1)).toEqual({
+          text: '  session limit reached (24)',
+          color: 'red',
+        });
+      });
+    });
+
+    it('setTerminalForeground derives the status from the name, in one write', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      useHiveStore.getState().setTerminalForeground(id, 'vitest');
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        status: 'running',
+        foreground: 'vitest',
+      });
+
+      useHiveStore.getState().setTerminalForeground(id, null);
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        status: 'prompt',
+      });
+      expect(useHiveStore.getState().entities[id]).not.toHaveProperty(
+        'foreground',
+      );
+    });
+
+    it('setTerminalForeground ignores a session and an unknown id', () => {
+      const before = useHiveStore.getState().entities;
+
+      useHiveStore.getState().setTerminalForeground('hero-refresh', 'vitest');
+      useHiveStore.getState().setTerminalForeground('term-zz', 'vitest');
+
+      // Identity, not equality: a no-op that still wrote would re-render every
+      // subscriber of the entities map on every poll tick.
+      expect(useHiveStore.getState().entities).toBe(before);
+    });
+
+    it('setTerminalForeground writes nothing when the name has not changed', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().setTerminalForeground(id, 'vitest');
+      const before = useHiveStore.getState().entities;
+
+      useHiveStore.getState().setTerminalForeground(id, 'vitest');
+
+      expect(useHiveStore.getState().entities).toBe(before);
+    });
+
+    it('markTerminalLost keeps the row and records why', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        ended: { reason: 'the pty host crashed' },
+      });
+      expect(useHiveStore.getState().order).toContain(id);
+    });
+
+    it('markTerminalLost keeps the first reason — the second is a consequence', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
+
+      useHiveStore.getState().markTerminalLost(id, 'the poll stopped answering');
+
+      expect(useHiveStore.getState().entities[id]).toMatchObject({
+        ended: { reason: 'the pty host crashed' },
+      });
+    });
+
+    it('removeTerminal drops the entity and leaves the stage if it was showing', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      expect(useUiStore.getState().activeTab).toBe(id);
+
+      useHiveStore.getState().removeTerminal(id);
+
+      expect(useHiveStore.getState().entities[id]).toBeUndefined();
+      expect(useHiveStore.getState().order).not.toContain(id);
+      expect(useUiStore.getState().activeTab).toBe('orch');
+    });
+
+    it('removeTerminal leaves another tab alone', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useUiStore.getState().openTab('hero-refresh');
+
+      useHiveStore.getState().removeTerminal(id);
+
+      expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+    });
+
+    it('removeTerminal refuses to remove a session', () => {
+      useHiveStore.getState().removeTerminal('hero-refresh');
+
+      expect(useHiveStore.getState().entities['hero-refresh']).toBeDefined();
+    });
+
+    it('a terminal sits in its project list and in the nav order, and in no count', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      const { result: project } = renderHook(() => useProjectSessions('nova-web'));
+      const { result: nav } = renderHook(() => useNavOrder());
+      const { result: counts } = renderHook(() => useCounts());
+      const { result: active } = renderHook(() => useActiveSessions());
+
+      expect(project.current).toContain(id);
+      expect(nav.current).toContain(id);
+      expect(active.current).not.toContain(id);
+      const total = Object.values(counts.current).reduce((a, b) => a + b, 0);
+      expect(total).toBe(
+        useHiveStore
+          .getState()
+          .order.filter(
+            (entityId) =>
+              useHiveStore.getState().entities[entityId]?.kind === 'session',
+          ).length,
+      );
     });
   });
 });
