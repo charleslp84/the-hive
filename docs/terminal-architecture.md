@@ -123,6 +123,23 @@ The two are deliberately separate functions. Collapsing them would make a
 surface typable whose transport was a recording, or make a send succeed into a
 session that had already exited.
 
+### A terminal is the same spawn without the bootstrap (terminals)
+
+A **terminal** is the same spawn with the bootstrap omitted. The host polls
+node-pty's `process` getter once a second for a spawn flagged `foreground` and
+emits on change; main forwards it as `session:foreground` for a terminal entity
+and drops it for anything else. Its endings are `session:terminal-ended`:
+`finished` for a plain exit, `lost` for a signal, a spawn error or a lost host —
+the exit code is never inspected, because a shell's `exit` returns the last
+command's.
+
+The getter answers with the kernel's comm name, and the poll suppresses it by
+comparing against the basename of the configured shell path. Those two agree for
+every real config and disagree where the path is an alias for another binary:
+macOS's `/bin/sh` is bash, so a terminal configured that way names its own
+prompt `bash` forever. `tests/conformance/foreground.conformance.mjs` records the
+measurement and pins a shell whose path and binary agree.
+
 ## Colour
 
 Terminal colour lives in JS, never CSS. xterm resolves colours from its own

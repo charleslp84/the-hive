@@ -559,6 +559,15 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
      */
     'restart',
     'spawn',
+    /**
+     * Terminals add `spawnTerminal`, a capability rather than a listener — and
+     * a **narrower** one than the `spawn` above it. It takes a project id and a
+     * size, never a shell, a command, a directory or an environment: main
+     * resolves all of those from the mapped project in the config file, the
+     * same way `spawn` does. What it grants the renderer is one login shell in
+     * a directory the user already mapped, with the bootstrap left off.
+     */
+    'spawnTerminal',
     'write',
   ]);
   /**
@@ -874,6 +883,12 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
    * The property worth pinning is no longer "listeners only" but "nothing here
    * carries a prompt, and nothing here names a path the renderer chose". That
    * still holds.
+   *
+   * Terminals add two more **listeners**, which is the cheapest widening this
+   * list takes. `onForeground` carries a process's comm name — `sleep`, `vim` —
+   * read from the tty main already owns, and `onTerminalEnded` carries how a
+   * shell stopped. Neither takes an argument from the renderer, neither names a
+   * path, and neither carries a prompt.
    */
   expect(surface.session).toEqual([
     'history',
@@ -881,10 +896,12 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'onBranch',
     'onCleared',
     'onFinished',
+    'onForeground',
     'onMetrics',
     'onName',
     'onReady',
     'onStatus',
+    'onTerminalEnded',
     'onTicketIntent',
     'pr',
   ]);

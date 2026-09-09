@@ -213,16 +213,29 @@ const STUB_CLAUDE_COMMAND = 'true; false';
  * mapped directory — but it is a *parameter* now (HIVE-104). Hard-coding
  * `name: id` meant no e2e spec could tell the two fields apart, which is
  * precisely how a rail that drew the id shipped past this suite.
+ *
+ * `shell` is a parameter for a narrower reason (terminals). A terminal row
+ * reads `at prompt` because the foreground poll suppresses **the shell's own
+ * name**, recognising it by the basename of the configured path — and on macOS
+ * `/bin/sh` *is* the bash binary, so node-pty's comm name says `bash` where the
+ * path said `sh` and the row names the prompt as a running process forever.
+ * `terminals.spec.ts` therefore pins a path whose basename is the binary's own
+ * name; every other spec wants the default and keeps it.
  */
 export function writeProjectConfig(
   configPath: string,
-  { id, name, path }: { id: string; name?: string; path: string },
+  {
+    id,
+    name,
+    path,
+    shell = '/bin/sh',
+  }: { id: string; name?: string; path: string; shell?: string },
 ): void {
   writeFileSync(
     configPath,
     JSON.stringify({
       version: 2,
-      shell: '/bin/sh',
+      shell,
       claudeCommand: STUB_CLAUDE_COMMAND,
       projects: [{ id, name: name ?? id, path, icon: 'ph-cube' }],
     }),
