@@ -255,4 +255,10 @@ describe('Terminal', () => {
     expect(cwdTail('/repos/nova-web/')).toBe('nova-web');
     expect(cwdTail('/')).toBe('/');
   });
+
+  it('reads lost once the shell died, whatever it was doing', () => {
+    expect(
+      terminalLabel({ ...terminal, status: 'running', foreground: 'vitest', ended: { reason: 'x', at: 1 } }),
+    ).toBe('lost');
+  });
 });

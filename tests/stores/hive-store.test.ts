@@ -55,6 +55,7 @@ import {
   useEndedSessions,
   currentRowFor,
   useHiveStore,
+  useProjectLiveCount,
   useProjectSessions,
   useIsAgentId,
   useLedgerEntries,
@@ -5731,6 +5732,67 @@ describe('the agent view selectors', () => {
       // Identity matters: a fresh [] each call re-renders every consumer on
       // any unrelated store write.
       expect(none.current).toBe(again.current);
+    });
+  });
+
+  describe('terminals — review fixes (PR #202)', () => {
+    beforeEach(() => {
+      useHiveStore.getState().reset();
+      seedDemoFleet();
+      seedDemoProjectConfig();
+      useUiStore.getState().reset();
+      vi.clearAllMocks();
+      vi.mocked(requestSpawnTerminal).mockResolvedValue({ ok: true });
+      vi.mocked(sendToSession).mockReturnValue({ ok: true });
+    });
+
+    it('send routes a live terminal to the pty by its own id', () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      const before = useHiveStore.getState().entities[id]!.lines.length;
+
+      const outcome = useHiveStore.getState().sendToEntity(id, 'ls');
+
+      expect(sendToSession).toHaveBeenCalledWith(id, 'ls');
+      expect(outcome).toEqual({ kind: 'routed' });
+      // No demo echo: the pty echoes what it receives.
+      expect(useHiveStore.getState().entities[id]!.lines).toHaveLength(before);
+    });
+
+    it('send refuses a lost terminal with the reason its tab shows', () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
+
+      const outcome = useHiveStore.getState().sendToEntity(id, 'ls');
+
+      expect(sendToSession).not.toHaveBeenCalled();
+      expect(outcome).toEqual({ kind: 'refused', reason: `${id} was lost — the pty host crashed` });
+    });
+
+    it('a refused spawn marks the terminal lost with the refusal', async () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      vi.mocked(requestSpawnTerminal).mockResolvedValue({ ok: false, reason: 'session limit reached (24)' });
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      await vi.waitFor(() => {
+        expect(useHiveStore.getState().entities[id]).toMatchObject({
+          ended: { reason: 'session limit reached (24)' },
+        });
+      });
+      expect(useHiveStore.getState().order).toContain(id);
+    });
+
+    it('useProjectLiveCount excludes a lost terminal and ended sessions, while the list keeps the lost one', () => {
+      const live = useHiveStore.getState().spawnTerminal('nova-web');
+      const lost = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().markTerminalLost(lost, 'gone');
+      const { result: list } = renderHook(() => useProjectSessions('nova-web'));
+      const { result: count } = renderHook(() => useProjectLiveCount('nova-web'));
+
+      expect(list.current).toContain(live);
+      expect(list.current).toContain(lost);
+      expect(count.current).toBe(list.current.length - 1);
     });
   });
 });

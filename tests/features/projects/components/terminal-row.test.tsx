@@ -85,4 +85,17 @@ describe('TerminalRow', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('reads lost, in muted, once the shell has died — never the stale foreground', () => {
+    act(() => {
+      useHiveStore.getState().setTerminalForeground(id, 'vitest');
+      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
+    });
+    render(<TerminalRow id={id} />);
+
+    const label = screen.getByText('lost');
+    expect(label.className).toContain('text-muted');
+    expect(label.className).not.toContain('text-brand');
+    expect(screen.queryByText('vitest')).toBeNull();
+  });
 });

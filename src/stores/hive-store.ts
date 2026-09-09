@@ -1867,6 +1867,13 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
             line(`  ${outcome.reason}`, 'red'),
           ]),
         }));
+        /*
+          A refusal is an ending. `withSpawnChannel` has already closed the
+          channel, so without this the tab would keep a blinking caret over a
+          shell that never started and offer no way to close it. Lost, with
+          the refusal as the reason, gives it the cover and the control.
+        */
+        get().markTerminalLost(id, outcome.reason);
       });
     }
 
@@ -2002,7 +2009,16 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * bridge to ask. One predicate covers both, which is what keeps a surface
      * from becoming typable while its transport stays a recording.
      */
-    if (isDesktop() && isSession(entity)) {
+    /*
+      A lost terminal has a channel that is closed and a shell that is gone.
+      Refuse with the reason the tab is already showing, rather than letting
+      the message vanish into a pty nothing reads.
+    */
+    if (isTerminal(entity) && entity.ended !== undefined) {
+      return { kind: 'refused', reason: `${id} was lost — ${entity.ended.reason}` };
+    }
+
+    if (isDesktop() && (isSession(entity) || isTerminal(entity))) {
       /**
        * Addressed to the **terminal**, because that is what owns the channel.
        *
@@ -2015,7 +2031,10 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * The *messages* still name the row, because that is what the user typed
        * and what they see in the rails.
        */
-      const result = sendToSession(terminalOf(entity), msg);
+      const result = sendToSession(
+        isTerminal(entity) ? entity.id : terminalOf(entity),
+        msg,
+      );
 
       /**
        * No echo, and no acknowledgement timer.
@@ -6284,6 +6303,24 @@ export const useProjectSessions = (projectId: string) =>
         return !isEnded(entity.status);
       }),
     ),
+  );
+
+/**
+ * How many of a project's entries are alive (terminals).
+ *
+ * `useProjectSessions` keeps a lost terminal in the list, because its tab is
+ * still on screen saying why; but a count that names it "running" or "active"
+ * is a lie. The tree's pill and the picker's row both read this instead.
+ */
+export const useProjectLiveCount = (projectId: string): number =>
+  useHiveStore((state) =>
+    state.order.reduce((count, id) => {
+      const entity = state.entities[id];
+      if (entity === undefined || isAgent(entity)) return count;
+      if (entity.project !== projectId) return count;
+      if (isTerminal(entity)) return entity.ended === undefined ? count + 1 : count;
+      return isEnded(entity.status) ? count : count + 1;
+    }, 0),
   );
 
 /** Every work item, in fixture order (story 032). */

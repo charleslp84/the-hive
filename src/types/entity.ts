@@ -602,9 +602,14 @@ export const isAgent = (entity: Entity): entity is Agent =>
 export const isTerminal = (entity: Entity): entity is Terminal =>
   entity.kind === 'terminal';
 
-/** `at prompt`, or what holds the tty. */
+/**
+ * `lost` once the shell died unasked; otherwise `at prompt`, or what holds
+ * the tty. `at prompt` is tier 1's honest floor: a shell built-in, a function
+ * or a `read` runs in the shell's own process and reads as the prompt until
+ * shell integration (tier 2) can say otherwise.
+ */
 export const terminalLabel = (terminal: Terminal): string =>
-  terminal.foreground ?? 'at prompt';
+  terminal.ended !== undefined ? 'lost' : (terminal.foreground ?? 'at prompt');
 
 /** The shell died unasked and the tab is showing why. */
 export const isLostTerminal = (entity: Entity | null | undefined): boolean =>

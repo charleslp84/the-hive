@@ -133,6 +133,12 @@ and drops it for anything else. Its endings are `session:terminal-ended`:
 the exit code is never inspected, because a shell's `exit` returns the last
 command's.
 
+`at prompt` is tier 1's honest floor, not a proof: a shell built-in, a
+function, a loop or a `read` runs in the shell's own process, so the row reads
+`at prompt` while `read -p Password:` waits. Only shell integration (OSC 133,
+tier 2) can say the prompt is actually up; until then the label is right in
+the common case and wrong in that one.
+
 The getter answers with the kernel's **executable** name, so the poll recognises
 the shell by that rather than by its path: the basename of the configured shell,
 except a configured `sh`, which is matched against every program that ships as

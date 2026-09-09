@@ -13,7 +13,7 @@ import { NewTerminalLink } from '@features/projects/components/new-terminal-link
 import { SessionRow } from '@features/projects/components/session-row';
 import { TerminalRow } from '@features/projects/components/terminal-row';
 import { useProjectAccess } from '@hooks/use-project-config';
-import { useEntity, useProjectSessions } from '@stores/hive-store';
+import { useEntity, useProjectLiveCount, useProjectSessions } from '@stores/hive-store';
 import { useProjectCollapsed, useToggleProject } from '@stores/ui-store';
 
 interface ProjectRowProps {
@@ -59,6 +59,7 @@ function ProjectEntryRow({ id }: { id: string }) {
  */
 export function ProjectRow({ project }: ProjectRowProps) {
   const sessionIds = useProjectSessions(project.id);
+  const liveCount = useProjectLiveCount(project.id);
   const collapsed = useProjectCollapsed(project.id);
   const toggleProject = useToggleProject();
   const access = useProjectAccess(project.id);
@@ -134,7 +135,7 @@ export function ProjectRow({ project }: ProjectRowProps) {
           empty state) rather than losing the pill entirely.
         */}
         <span className="shrink-0 rounded-full bg-chip px-2 py-0.5 font-mono text-[11px] text-muted">
-          {sessionIds.length}
+          {liveCount}
           {/*
             `running`, not `active session(s)` (terminals): the list holds
             sessions *and* terminals now, so a word that names one kind would

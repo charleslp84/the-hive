@@ -33,7 +33,9 @@ export function TerminalRow({ id }: TerminalRowProps) {
   if (!entity || !isTerminal(entity)) return null;
 
   const active = activeTab === id;
-  const tone = STATUS_TEXT[entity.status];
+  // A dead shell keeps its last status on the entity, but the row must not
+  // paint it: muted, like a terminated session, with `lost` for the word.
+  const tone = entity.ended === undefined ? STATUS_TEXT[entity.status] : 'text-muted';
 
   return (
     <button
