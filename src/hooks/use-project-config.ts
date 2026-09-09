@@ -3,6 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   projectAccess,
   projectConfigSnapshot,
+  projectContainerised,
   projectPath,
   readAppInfo,
   subscribeProjectConfig,
@@ -59,6 +60,22 @@ export function useProjectAccess(projectId: string): ProjectAccess {
     projectConfigSnapshot,
   );
   return projectAccess(projectId);
+}
+
+/**
+ * Whether a project's sessions run in a container (terminals).
+ *
+ * Same subscribe-then-derive shape as {@link useProjectAccess}, and for the
+ * same stated reason: the two can never disagree about which snapshot they
+ * were computed from — and the terminal link reads both at once.
+ */
+export function useProjectContainerised(projectId: string): boolean {
+  useSyncExternalStore(
+    subscribeProjectConfig,
+    projectConfigSnapshot,
+    projectConfigSnapshot,
+  );
+  return projectContainerised(projectId);
 }
 
 /**
