@@ -8,11 +8,13 @@ import {
   CHANNEL_AUTHORIZATION,
   FRAME_KIND,
   REMOTE_PROTOCOL_VERSION,
+  REMOTE_REFUSED_CHANNELS,
   WINDOW_BOUND,
   authorizationOf,
   frameKindOf,
   isAuthorized,
   isClientFrameAllowed,
+  remoteRefusedReason,
   windowBoundReason,
 } from '@shared/remote-contract';
 
@@ -50,7 +52,7 @@ const entries = Object.entries(CH) as ReadonlyArray<[string, Channel]>;
 
 describe('remote contract: coverage', () => {
   it('classifies every channel exactly once for frame kind', () => {
-    expect(entries).toHaveLength(120);
+    expect(entries).toHaveLength(127);
     expect(Object.keys(FRAME_KIND).sort()).toEqual([...Object.values(CH)].sort());
   });
 
@@ -81,11 +83,11 @@ describe('remote contract: frame kinds match the preload bridge', () => {
     expect(frameKindOf(channel)).toBe(expected);
   });
 
-  it('splits 90 call, 6 notify and 24 event', () => {
+  it('splits 97 call, 6 notify and 24 event', () => {
     const tally = { call: 0, notify: 0, event: 0 };
     for (const kind of Object.values(FRAME_KIND)) tally[kind] += 1;
 
-    expect(tally).toEqual({ call: 90, notify: 6, event: 24 });
+    expect(tally).toEqual({ call: 97, notify: 6, event: 24 });
   });
 
   /**
@@ -126,11 +128,11 @@ describe('remote contract: authorization', () => {
     expect(authorizationOf(channel)).toBe('execute');
   });
 
-  it('grades the 120 as 53 read, 38 mutate and 29 execute', () => {
+  it('grades the 127 as 54 read, 41 mutate and 32 execute', () => {
     const tally = { read: 0, mutate: 0, execute: 0 };
     for (const authz of Object.values(CHANNEL_AUTHORIZATION)) tally[authz] += 1;
 
-    expect(tally).toEqual({ read: 53, mutate: 38, execute: 29 });
+    expect(tally).toEqual({ read: 54, mutate: 41, execute: 32 });
   });
 
   /**
@@ -322,6 +324,55 @@ describe('remote contract: direction', () => {
   });
 });
 
+/**
+ * `skills:file:drop` is graded `execute` — its ceiling — and is still refused
+ * for every remote caller, because the grade assumes the call is genuine and
+ * this channel's local safety argument (preload minted every `sources` entry)
+ * is a fact the wire cannot carry (HIVE-148).
+ */
+describe('remote contract: channels refused over the wire regardless of grant', () => {
+  it('refuses skills:file:drop even at execute, the grade it already holds', () => {
+    expect(isClientFrameAllowed('call', CH.skillsFileDrop, 'execute')).toBe(false);
+  });
+
+  it('is graded execute by CHANNEL_AUTHORIZATION — the refusal is not a lower grade in disguise', () => {
+    expect(authorizationOf(CH.skillsFileDrop)).toBe('execute');
+    expect(isAuthorized(CH.skillsFileDrop, 'execute')).toBe(true);
+  });
+
+  it('does not refuse every skills bundle channel — only drop', () => {
+    expect(REMOTE_REFUSED_CHANNELS.has(CH.skillsFileImport)).toBe(false);
+    expect(isClientFrameAllowed('call', CH.skillsFileImport, 'execute')).toBe(true);
+    expect(isClientFrameAllowed('call', CH.skillsFileWrite, 'execute')).toBe(true);
+  });
+
+  /**
+   * The sentence, not only the boolean (HIVE-148 review). Before this,
+   * `remote-dispatch.ts` had nothing to ask *why* `skills:file:drop` was
+   * refused beyond `isClientFrameAllowed`'s own false, so the dispatcher
+   * answered with the generic direction refusal's message — "is not a call
+   * channel" — which is false: it is one, correctly directed, at the
+   * highest grade a device holds. `remoteRefusedReason` is what gives the
+   * true one, the same way `windowBoundReason` already does for its table.
+   */
+  it('gives a true reason for skills:file:drop, not the direction refusal\'s message', () => {
+    const reason = remoteRefusedReason(CH.skillsFileDrop);
+
+    expect(reason).not.toBeNull();
+    expect(reason).not.toMatch(/is not a call channel/);
+    expect(reason).toMatch(/preload/i);
+  });
+
+  it('answers null for a channel that is not remote-refused', () => {
+    expect(remoteRefusedReason(CH.skillsFileImport)).toBeNull();
+    expect(remoteRefusedReason(CH.skillsFileWrite)).toBeNull();
+  });
+
+  it('answers null for an unknown channel rather than throwing', () => {
+    expect(remoteRefusedReason('not:a:channel')).toBeNull();
+  });
+});
+
 describe('remote contract: the version handshake', () => {
   it('is a positive integer, so a mismatch is orderable', () => {
     expect(Number.isInteger(REMOTE_PROTOCOL_VERSION)).toBe(true);
@@ -342,16 +393,34 @@ describe('remote contract: an unclassified channel is a compile error', () => {
 });
 
 describe('WINDOW_BOUND', () => {
-  it('names exactly the three dialog channels', () => {
+  it('names exactly the four dialog channels', () => {
     expect(Object.keys(WINDOW_BOUND).sort()).toEqual(
-      [CH.configChooseDirectory, CH.themePick, CH.themeSave].sort(),
+      [
+        CH.configChooseDirectory,
+        CH.skillsFileImport,
+        CH.themePick,
+        CH.themeSave,
+      ].sort(),
     );
   });
 
-  it('gives every entry a reason naming the ticket that removes it', () => {
-    for (const reason of Object.values(WINDOW_BOUND)) {
-      expect(reason).toMatch(/HIVE-146/);
-    }
+  it('names the ticket that removes an entry, where one exists', () => {
+    /*
+      HIVE-146 owns three of these and deletes each as it lands a replacement.
+      `skills:file:import` is the fourth and has no such ticket: picking files
+      for a skill on the *server* would copy the server's files rather than the
+      user's, so there is nothing to move to a client-side picker — the drop
+      verb already does that job, and the reason below says so.
+    */
+    expect(WINDOW_BOUND[CH.configChooseDirectory]).toMatch(/HIVE-146/);
+    expect(WINDOW_BOUND[CH.themePick]).toMatch(/HIVE-146/);
+    expect(WINDOW_BOUND[CH.themeSave]).toMatch(/HIVE-146/);
+  });
+
+  it('tells a remote user what to do instead, for the entry no ticket covers', () => {
+    // A refusal with no route forward is a dead end. This one names the verb
+    // that does work over a socket.
+    expect(WINDOW_BOUND[CH.skillsFileImport]).toMatch(/drag/i);
   });
 
   it('only ever names a call channel', () => {

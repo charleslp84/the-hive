@@ -254,7 +254,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(96);
+    expect(remoteRegistrySize()).toBe(103);
   });
 
   it('empties the registry on reset, so a socket sees not-ready rather than a stale handler', () => {
