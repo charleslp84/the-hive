@@ -299,6 +299,10 @@ describe('CenterStage — interactive terminals', () => {
     (window as { hive?: unknown }).hive = {
       pty: {
         spawn: vi.fn(() => Promise.resolve()),
+        // The terminal verb (terminals). A shell takes the same channel
+        // bookkeeping as a session over a different spawn, so this is the only
+        // member the terminal transport adds to the stub.
+        spawnTerminal: vi.fn(() => Promise.resolve()),
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(() => Promise.resolve()),
@@ -452,6 +456,47 @@ describe('CenterStage — interactive terminals', () => {
       );
 
       expect(useUiStore.getState().activeTab).toBe('hero-refresh');
+    });
+  });
+
+  /**
+   * A terminal whose shell dies while it is on screen (terminals).
+   *
+   * Bridge-backed deliberately, and that is the whole point of the block: with
+   * no bridge a terminal is a recording, `disableStdin` is already `true` from
+   * construction, and an assertion on it passes whether or not the stage tells
+   * the surface anything. Live, it starts `false` — so the transition below is
+   * the only thing in the unit suite that can fail if `endedId` stops asking
+   * `isLostTerminal`.
+   */
+  describe('a terminal whose shell dies while it is on screen (terminals)', () => {
+    it('covers it with the reason, and its surface stops taking input', () => {
+      withBridge();
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      render(<CenterStage />);
+
+      // A live shell, before anything happens to it.
+      const surface = terminalInstances.at(-1)!;
+      expect(surface.options.disableStdin).toBe(false);
+
+      act(() =>
+        useHiveStore
+          .getState()
+          .markTerminalLost(id, 'the shell was killed by signal 9'),
+      );
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'the shell was killed by signal 9',
+      );
+      /*
+        Same instance, not a rebuilt one: the strip explains what happened over
+        a transcript that has to survive to be read.
+      */
+      expect(terminalInstances.at(-1)).toBe(surface);
+      expect(surface.options.disableStdin).toBe(true);
+      // A blinking caret over a dead shell is an invitation to type into
+      // nothing.
+      expect(surface.options.cursorBlink).toBe(false);
     });
   });
 });
@@ -722,9 +767,11 @@ describe('CenterStage — the editor', () => {
  *
  * A shell is not a session, and the chrome around it says so: no meta bar,
  * because there is no branch, ticket or status to name; no boot cover, because
- * nothing is starting that the user should be kept from watching. What it does
- * get, once its shell dies unasked, is a strip saying why — over a terminal
- * still holding the scrollback that led to it.
+ * nothing is starting that the user should be kept from watching.
+ *
+ * What it gets once its shell dies unasked is above, under `interactive
+ * terminals` — that assertion needs a live surface to be worth anything, and
+ * this block has no bridge.
  */
 describe('CenterStage — terminals', () => {
   beforeEach(() => {
@@ -750,19 +797,5 @@ describe('CenterStage — terminals', () => {
     expect(screen.queryByTestId('session-meta-bar')).toBeNull();
     expect(screen.queryByTestId('session-boot-cover')).toBeNull();
     expect(useUiStore.getState().activeTab).toBe(id);
-  });
-
-  it('covers a lost terminal with its reason, and the surface reads ended', () => {
-    const id = useHiveStore.getState().spawnTerminal('nova-web');
-    act(() =>
-      useHiveStore.getState().markTerminalLost(id, 'the shell was killed by signal 9'),
-    );
-    render(<CenterStage />);
-
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'the shell was killed by signal 9',
-    );
-    const surface = terminalInstances.at(-1)!;
-    expect(surface.options.disableStdin).toBe(true);
   });
 });
