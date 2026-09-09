@@ -136,7 +136,7 @@ command's.
 The getter answers with the kernel's **executable** name, so the poll recognises
 the shell by that rather than by its path: the basename of the configured shell,
 except a configured `sh`, which is matched against every program that ships as
-one — `sh`, `bash`, `dash`, `zsh`, `ash` — because `/bin/sh` is a bash build on
+one — `sh`, `bash`, `dash`, `ash` — because `/bin/sh` is a bash build on
 macOS and dash on Debian.
 
 ## Colour

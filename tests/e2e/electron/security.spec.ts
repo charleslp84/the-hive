@@ -561,8 +561,9 @@ test('window.hive exposes only the documented verbs', async ({ page }) => {
     'spawn',
     /**
      * Terminals add `spawnTerminal`, a capability rather than a listener — and
-     * a **narrower** one than the `spawn` above it. It takes a project id and a
-     * size, never a shell, a command, a directory or an environment: main
+     * a **narrower** one than the `spawn` above it. It takes a session id, a
+     * project id and a size, never a shell, a command, a directory or an
+     * environment: main
      * resolves all of those from the mapped project in the config file, the
      * same way `spawn` does. What it grants the renderer is one login shell in
      * a directory the user already mapped, with the bootstrap left off.

@@ -355,7 +355,7 @@ A collapsible tree: `ProjectsPanel` → `ProjectRow` → `SessionRow | TerminalR
 session data — **each row owns its own subscription**, so one session changing
 status repaints that row rather than the whole tree.
 
-Three things here are easy to get wrong:
+Four things here are easy to get wrong:
 
 - **The count pill is a plain span, not `Badge`.** `Badge` renders nothing at
   zero, and a project with no live sessions must still show its `0` — that is the

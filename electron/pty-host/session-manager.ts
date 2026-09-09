@@ -159,13 +159,7 @@ const remaining = (deadline: number): number =>
  * forever. Any other configured shell is matched by its basename alone —
  * `/bin/zsh` is `zsh` everywhere.
  */
-const SH_PROVIDERS: ReadonlySet<string> = new Set([
-  'sh',
-  'bash',
-  'dash',
-  'zsh',
-  'ash',
-]);
+const SH_PROVIDERS: ReadonlySet<string> = new Set(['sh', 'bash', 'dash', 'ash']);
 
 /** The names the configured shell is allowed to answer the tty with. */
 function shellNamesFor(shell: string): ReadonlySet<string> {
