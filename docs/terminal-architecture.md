@@ -133,12 +133,11 @@ and drops it for anything else. Its endings are `session:terminal-ended`:
 the exit code is never inspected, because a shell's `exit` returns the last
 command's.
 
-The getter answers with the kernel's comm name, and the poll suppresses it by
-comparing against the basename of the configured shell path. Those two agree for
-every real config and disagree where the path is an alias for another binary:
-macOS's `/bin/sh` is bash, so a terminal configured that way names its own
-prompt `bash` forever. `tests/conformance/foreground.conformance.mjs` records the
-measurement and pins a shell whose path and binary agree.
+The getter answers with the kernel's **executable** name, so the poll recognises
+the shell by that rather than by its path: the basename of the configured shell,
+except a configured `sh`, which is matched against every program that ships as
+one — `sh`, `bash`, `dash`, `zsh`, `ash` — because `/bin/sh` is a bash build on
+macOS and dash on Debian.
 
 ## Colour
 

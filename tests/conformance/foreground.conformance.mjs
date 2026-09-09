@@ -8,25 +8,15 @@ import { assert, describe, it } from './harness.mjs';
  * group of a real shell: `null` at the prompt, `sleep` while one runs, and
  * `null` again when it returns.
  *
- * ## Why `/bin/bash` here, when the rest of the suite says `/bin/sh`
- *
- * The prompt reading is `null` because the poll suppresses **the shell's own
- * name**, and it recognises the shell by the basename of the path that was
- * spawned. node-pty's `process` getter answers with the kernel's comm name —
- * the name of the *executable* — and on macOS `/bin/sh` is the bash binary, so
- * the getter says `bash` where the path said `sh` and the prompt is reported as
- * a running process called `bash` for as long as the session lives (measured
- * here: `{"type":"foreground","name":"bash"}` one second after the spawn).
- * Linux has the same shape with dash. So the shell's identity *is* the subject
- * in this group, and it is pinned to a path whose basename is the binary's own
- * name — the case every real config is, and the only one in which the product's
- * claim is even expressible.
+ * The harness default `/bin/sh` is deliberate here rather than incidental, and
+ * it is the configuration a real pty caught the poll getting wrong: the comm
+ * name is the *executable's*, and on this platform `/bin/sh` is a bash build
+ * that answers `bash`. A prompt reading of `null` is therefore a claim about
+ * the shell being recognised at all, not only about the tty being idle.
  */
 describe('foreground', () => {
   it('reports the prompt, then the running command, then the prompt', async (context) => {
-    const session = await context.ready(
-      context.open({ shell: '/bin/bash', foreground: true }),
-    );
+    const session = await context.ready(context.open({ foreground: true }));
 
     await session.waitForForeground((name) => name === null, { timeout: 3_000 });
 

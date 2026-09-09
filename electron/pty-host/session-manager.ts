@@ -150,6 +150,29 @@ const TEARDOWN_BUDGET_MS = SHUTDOWN_TIMEOUT_MS - 500;
 const remaining = (deadline: number): number =>
   Math.max(0, deadline - Date.now());
 
+/**
+ * What a `sh` may call itself.
+ *
+ * `/bin/sh` is rarely its own program: on macOS it is a bash build whose comm
+ * name is `bash`, on Debian it is `dash`, on Alpine `ash`. A terminal
+ * configured with `shell: /bin/sh` would otherwise name its own prompt `bash`
+ * forever. Any other configured shell is matched by its basename alone —
+ * `/bin/zsh` is `zsh` everywhere.
+ */
+const SH_PROVIDERS: ReadonlySet<string> = new Set([
+  'sh',
+  'bash',
+  'dash',
+  'zsh',
+  'ash',
+]);
+
+/** The names the configured shell is allowed to answer the tty with. */
+function shellNamesFor(shell: string): ReadonlySet<string> {
+  const name = basename(shell);
+  return name === 'sh' ? SH_PROVIDERS : new Set([name]);
+}
+
 export function createSessionManager(
   options: SessionManagerOptions = {},
 ): SessionManager {
@@ -209,18 +232,25 @@ export function createSessionManager(
    *
    * node-pty's `process` getter is `tcgetpgrp` plus a `sysctl` for the name on
    * darwin, and it returns a comm name — `zsh`, never `/bin/zsh` — so the
-   * shell is recognised by the basename of what was spawned. The getter can
+   * shell is recognised by name rather than by path. Which names count is
+   * {@link shellNamesFor}'s business: the comm name is the **executable's**,
+   * and `/bin/sh` is almost never an executable called `sh`. The getter can
    * throw on a closed fd; that is read as "unknown", which is reported as the
    * prompt rather than as a process the row would then invent.
    */
-  function readForeground(session: Session, shellName: string): string | null {
+  function readForeground(
+    session: Session,
+    shellNames: ReadonlySet<string>,
+  ): string | null {
     let name: string;
     try {
       name = session.pty.process;
     } catch {
       return null;
     }
-    if (name === '' || name === shellName || basename(name) === shellName) return null;
+    if (name === '' || shellNames.has(name) || shellNames.has(basename(name))) {
+      return null;
+    }
     return name;
   }
 
@@ -231,7 +261,7 @@ export function createSessionManager(
   }
 
   function startForegroundPoll(session: Session, shell: string): void {
-    const shellName = basename(shell);
+    const shellNames = shellNamesFor(shell);
     // Left `undefined` rather than seeded to `null`: the first read is a real
     // read of the tty, and it must be able to report `null` (the shell at its
     // prompt) as a change from "nothing observed yet" — seeding this to `null`
@@ -242,7 +272,7 @@ export function createSessionManager(
         stopForegroundPoll(session);
         return;
       }
-      const name = readForeground(session, shellName);
+      const name = readForeground(session, shellNames);
       if (name === session.lastForeground) return;
       session.lastForeground = name;
       session.emit({ type: 'foreground', sessionId: session.sessionId, name });

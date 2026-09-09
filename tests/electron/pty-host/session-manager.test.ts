@@ -961,6 +961,45 @@ describe('foreground (terminals)', () => {
     expect(foregroundNames()).toEqual([null, 'vitest', null]);
   });
 
+  /**
+   * The defect a real pty found, and the reason the comparison is a *set*.
+   *
+   * The comm name is the executable's, and `/bin/sh` is almost never an
+   * executable called `sh`: on macOS it is a bash build, on Debian dash, on
+   * Alpine ash. Matching the configured path's basename alone made a terminal
+   * configured with `shell: /bin/sh` report its own idle prompt as a running
+   * program called `bash`, once a second, for as long as it lived.
+   */
+  it('reads a sh that calls itself bash as the prompt', () => {
+    vi.useFakeTimers();
+    manager.spawn({ ...TERMINAL, shell: '/bin/sh' }, emit);
+
+    pty().process = 'bash';
+    vi.advanceTimersByTime(1_000);
+    expect(foregroundNames()).toEqual([null]);
+
+    pty().process = 'vitest';
+    vi.advanceTimersByTime(1_000);
+    expect(foregroundNames()).toEqual([null, 'vitest']);
+  });
+
+  /**
+   * The other half, which is what stops the fix from being a blanket amnesty:
+   * the widening applies to a shell configured as `sh` and to nothing else. A
+   * `bash` started inside a zsh terminal is a program the user ran, and the row
+   * should name it.
+   */
+  it('names a nested shell in a terminal that is not a sh', () => {
+    vi.useFakeTimers();
+    manager.spawn(TERMINAL, emit);
+    vi.advanceTimersByTime(1_000);
+
+    pty().process = 'bash';
+    vi.advanceTimersByTime(1_000);
+
+    expect(foregroundNames()).toEqual([null, 'bash']);
+  });
+
   it('stops polling on exit and never emits after the exit message', () => {
     vi.useFakeTimers();
     manager.spawn(TERMINAL, emit);

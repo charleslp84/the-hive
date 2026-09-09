@@ -10,12 +10,6 @@ import { launchHive, writeProjectConfig } from './fixtures/hive-app';
  * The only test that proves the whole path: a click in the tree, a real
  * spawn through main, a real host poll reading a real foreground process
  * group, and the `exit` ending taking the row and the tab with it.
- *
- * The config pins `/bin/bash` rather than taking the fixture's `/bin/sh`. The
- * poll suppresses the shell's own name by the basename of the configured path,
- * and macOS's `/bin/sh` is the bash binary — so under the default the row would
- * read `bash` at the prompt, which is a property of this machine's `/bin/sh`
- * and not of the feature. `foreground.conformance.mjs` records the measurement.
  */
 const REAL_DIRECTORY = join(import.meta.dirname, '../../..');
 
@@ -23,7 +17,6 @@ test('opens at a prompt, names a running command, and leaves on exit', async ({}
   writeProjectConfig(testInfo.outputPath('hive-config.json'), {
     id: 'nova-web',
     path: REAL_DIRECTORY,
-    shell: '/bin/bash',
   });
   const app = await launchHive({
     userDataDir: testInfo.outputPath('user-data'),
