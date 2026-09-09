@@ -2121,15 +2121,20 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
      * from becoming typable while its transport stays a recording.
      */
     /*
-      A lost terminal has a channel that is closed and a shell that is gone.
-      Refuse with the reason the tab is already showing, rather than letting
-      the message vanish into a pty nothing reads.
+      `send` is a session verb. A terminal is a shell the user types into
+      directly — there is no agent at the other end to route a message to —
+      so it is refused the way an agent is, naming the verb that does work.
+      Without this a terminal would fall into the demo echo below and the
+      console would report `routed` for bytes that reached nothing.
     */
-    if (isTerminal(entity) && entity.ended !== undefined) {
-      return { kind: 'refused', reason: `${id} was lost — ${entity.ended.reason}` };
+    if (isTerminal(entity)) {
+      return {
+        kind: 'refused',
+        reason: `terminals are typed into, not sent: open ${id}`,
+      };
     }
 
-    if (isDesktop() && (isSession(entity) || isTerminal(entity))) {
+    if (isDesktop() && isSession(entity)) {
       /**
        * Addressed to the **terminal**, because that is what owns the channel.
        *
@@ -2142,10 +2147,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
        * The *messages* still name the row, because that is what the user typed
        * and what they see in the rails.
        */
-      const result = sendToSession(
-        isTerminal(entity) ? entity.id : terminalOf(entity),
-        msg,
-      );
+      const result = sendToSession(terminalOf(entity), msg);
 
       /**
        * No echo, and no acknowledgement timer.

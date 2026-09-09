@@ -5746,28 +5746,31 @@ describe('the agent view selectors', () => {
       vi.mocked(sendToSession).mockReturnValue({ ok: true });
     });
 
-    it('send routes a live terminal to the pty by its own id', () => {
+    it('send refuses a terminal, live or lost — send is a session verb', () => {
       vi.mocked(isDesktop).mockReturnValue(true);
-      const id = useHiveStore.getState().spawnTerminal('nova-web');
-      const before = useHiveStore.getState().entities[id]!.lines.length;
+      const live = useHiveStore.getState().spawnTerminal('nova-web');
+      const lost = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().markTerminalLost(lost, 'the pty host crashed');
+      const before = useHiveStore.getState().entities[live]!.lines.length;
 
-      const outcome = useHiveStore.getState().sendToEntity(id, 'ls');
-
-      expect(sendToSession).toHaveBeenCalledWith(id, 'ls');
-      expect(outcome).toEqual({ kind: 'routed' });
-      // No demo echo: the pty echoes what it receives.
-      expect(useHiveStore.getState().entities[id]!.lines).toHaveLength(before);
+      expect(useHiveStore.getState().sendToEntity(live, 'ls')).toEqual({
+        kind: 'refused',
+        reason: `terminals are typed into, not sent: open ${live}`,
+      });
+      expect(useHiveStore.getState().sendToEntity(lost, 'ls')).toMatchObject({ kind: 'refused' });
+      // Neither the pty nor the demo echo: nothing reached anything.
+      expect(sendToSession).not.toHaveBeenCalled();
+      expect(useHiveStore.getState().entities[live]!.lines).toHaveLength(before);
     });
 
-    it('send refuses a lost terminal with the reason its tab shows', () => {
+    it('the console says so in red and names open', () => {
       vi.mocked(isDesktop).mockReturnValue(true);
       const id = useHiveStore.getState().spawnTerminal('nova-web');
-      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
-
-      const outcome = useHiveStore.getState().sendToEntity(id, 'ls');
-
-      expect(sendToSession).not.toHaveBeenCalled();
-      expect(outcome).toEqual({ kind: 'refused', reason: `${id} was lost — the pty host crashed` });
+      useHiveStore.getState().runOrchCommand(parseCommand(`send ${id} ls`));
+      expect(useHiveStore.getState().orchLines.at(-1)).toEqual({
+        text: `  terminals are typed into, not sent: open ${id}`,
+        color: 'red',
+      });
     });
 
     it('a refused spawn marks the terminal lost with the refusal', async () => {

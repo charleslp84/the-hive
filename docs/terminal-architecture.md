@@ -133,6 +133,10 @@ and drops it for anything else. Its endings are `session:terminal-ended`:
 the exit code is never inspected, because a shell's `exit` returns the last
 command's.
 
+`send` is a session verb and refuses a terminal — a shell is typed into
+directly, and there is no agent at the other end to route a message to — with
+a line that names `open`, the verb that brings the terminal to the stage.
+
 `at prompt` is tier 1's honest floor, not a proof: a shell built-in, a
 function, a loop or a `read` runs in the shell's own process, so the row reads
 `at prompt` while `read -p Password:` waits. Only shell integration (OSC 133,
