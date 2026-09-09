@@ -716,3 +716,53 @@ describe('CenterStage — the editor', () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * A terminal on the stage (terminals).
+ *
+ * A shell is not a session, and the chrome around it says so: no meta bar,
+ * because there is no branch, ticket or status to name; no boot cover, because
+ * nothing is starting that the user should be kept from watching. What it does
+ * get, once its shell dies unasked, is a strip saying why — over a terminal
+ * still holding the scrollback that led to it.
+ */
+describe('CenterStage — terminals', () => {
+  beforeEach(() => {
+    useHiveStore.getState().reset();
+    seedDemoFleet();
+    useUiStore.getState().reset();
+    resetTerminalInstances();
+    resetFitAddonInstances();
+    resetWebLinksAddonInstances();
+  });
+
+  it('shows a terminal surface with no meta bar and no boot cover', () => {
+    const id = useHiveStore.getState().spawnTerminal('nova-web');
+    render(<CenterStage />);
+
+    /*
+      One surface, and it is the terminal's — which only happens because the
+      stage builds its entries from `useTerminalHostIds`. `useNavOrder` is the
+      fleet table's order and deliberately carries no terminal, so a stage
+      reading it would open a tab with no transport behind it.
+    */
+    expect(visibleSurfaces()).toHaveLength(1);
+    expect(screen.queryByTestId('session-meta-bar')).toBeNull();
+    expect(screen.queryByTestId('session-boot-cover')).toBeNull();
+    expect(useUiStore.getState().activeTab).toBe(id);
+  });
+
+  it('covers a lost terminal with its reason, and the surface reads ended', () => {
+    const id = useHiveStore.getState().spawnTerminal('nova-web');
+    act(() =>
+      useHiveStore.getState().markTerminalLost(id, 'the shell was killed by signal 9'),
+    );
+    render(<CenterStage />);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'the shell was killed by signal 9',
+    );
+    const surface = terminalInstances.at(-1)!;
+    expect(surface.options.disableStdin).toBe(true);
+  });
+});
