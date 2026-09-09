@@ -60,6 +60,7 @@ import {
   useNavOrder,
   useOpenAskCount,
   useSessionNameReports,
+  useTerminalHostIds,
   useThread,
 } from '@stores/hive-store';
 import { parseCommand } from '@features/orchestrator/utils/parse-command';
@@ -4004,15 +4005,13 @@ describe('hive-store', () => {
       expect(useHiveStore.getState().entities['hero-refresh']).toBeDefined();
     });
 
-    it('a terminal sits in its project list and in the nav order, and in no count', () => {
+    it('a terminal sits in its project list, and in no count', () => {
       const id = useHiveStore.getState().spawnTerminal('nova-web');
       const { result: project } = renderHook(() => useProjectSessions('nova-web'));
-      const { result: nav } = renderHook(() => useNavOrder());
       const { result: counts } = renderHook(() => useCounts());
       const { result: active } = renderHook(() => useActiveSessions());
 
       expect(project.current).toContain(id);
-      expect(nav.current).toContain(id);
       expect(active.current).not.toContain(id);
       const total = Object.values(counts.current).reduce((a, b) => a + b, 0);
       expect(total).toBe(
@@ -4023,6 +4022,35 @@ describe('hive-store', () => {
               useHiveStore.getState().entities[entityId]?.kind === 'session',
           ).length,
       );
+    });
+
+    /**
+     * Two lists, two questions.
+     *
+     * `useNavOrder` is the fleet table's row and caret order, and the table
+     * draws no terminal row — a terminal in it would put the caret somewhere
+     * nobody can see and point `→` at a target the user never selected. The
+     * stage mounts a surface per terminal, so its list is the union.
+     */
+    it('stays out of the fleet table’s nav order', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      const { result: nav } = renderHook(() => useNavOrder());
+
+      expect(nav.current).not.toContain(id);
+    });
+
+    it('is in the stage’s host list, after everything the table can reach', () => {
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+
+      const { result: nav } = renderHook(() => useNavOrder());
+      const { result: hosts } = renderHook(() => useTerminalHostIds());
+
+      expect(hosts.current).toContain(id);
+      // A prefix, not merely a superset: the stage's extra ids are the
+      // terminals, appended, so the table's order is untouched inside it.
+      expect(hosts.current.slice(0, nav.current.length)).toEqual(nav.current);
+      expect(hosts.current.slice(nav.current.length)).toEqual([id]);
     });
   });
 });

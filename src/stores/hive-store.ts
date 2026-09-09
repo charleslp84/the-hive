@@ -5251,61 +5251,78 @@ export const useIdleDetailCounts = () =>
     }),
   );
 
+/**
+ * The fleet table's flattened order — the computation, without the subscription.
+ *
+ * Extracted from {@link useNavOrder} so {@link useTerminalHostIds} can build on
+ * it rather than hold a second copy of the partition. Two selectors spelling one
+ * rule is exactly how the caret and the rows come to disagree about where "here"
+ * is, which is the failure this function exists to prevent.
+ *
+ * **Two** buckets, each newest-first, and both facts are the table's rather than
+ * this function's.
+ *
+ * There were three until the fleet table stopped drawing a PREVIOUS RUN
+ * divider: restored rows are ended rows, and once every group sorts by
+ * recency they interleave with this run's endings correctly on their own.
+ * The `restored` flag is still on the entity — Resume and `endedReason`
+ * both read it — it simply no longer partitions anything.
+ *
+ * This exists precisely to keep the caret and the rows agreeing about where
+ * "here" is, so the partition *and* the sort have to match `session-table.tsx`
+ * exactly. A flattening in a different order from the one on screen makes the
+ * down arrow skip a row and come back to it.
+ *
+ * **Three** buckets since HIVE-117, because the table draws three. The
+ * agents sit between the two session groups, ranked by `rankedAgents` —
+ * the same function the table's own group is drawn from, not a second
+ * copy of its rule. Without them here an agent row was still *selectable*
+ * (it renders the caret and sets `selId` on click) while being absent
+ * from the order every arrow key consults: `↓` from one teleported to the
+ * first session, `↑` to the last ended row, and `→` opened nothing at all
+ * because `console-input.tsx` gates on membership of this list.
+ *
+ * **Still three, and terminals are deliberately not a fourth** (terminals). The
+ * table draws no terminal row — a shell lives in the projects tree — so a
+ * terminal here would put the caret on a row nobody can see and `→` on a target
+ * the user never selected. The stage's list is {@link useTerminalHostIds},
+ * which is a different question with a different answer.
+ */
+function navOrderOf(state: HiveState): string[] {
+  const active: string[] = [];
+  const ended: string[] = [];
+  for (const id of state.order) {
+    const entity = state.entities[id];
+    if (!entity || !isSession(entity)) continue;
+    if (isEnded(entity.status)) ended.push(id);
+    else active.push(id);
+  }
+  return [
+    ...byRecency(active, state.entities),
+    ...rankedAgents(state.agentOrder, state.entities),
+    ...byRecency(ended, state.entities),
+  ];
+}
+
 /** Active sessions first, then ended ones — the keyboard nav order (041, 060). */
-export const useNavOrder = () =>
+export const useNavOrder = () => useHiveStore(useShallow(navOrderOf));
+
+/**
+ * Every id the centre stage mounts a terminal surface for (terminals).
+ *
+ * `useNavOrder` is the fleet table's order, and the table draws no terminal
+ * row — so a terminal in that list would put the console's caret on a row
+ * nobody can see. The stage needs the union: everything the table can reach,
+ * then every terminal in the order it started.
+ */
+export const useTerminalHostIds = () =>
   useHiveStore(
     useShallow((state) => {
-      /**
-       * **Two** buckets, each newest-first, and both facts are the table's
-       * rather than this selector's.
-       *
-       * There were three until the fleet table stopped drawing a PREVIOUS RUN
-       * divider: restored rows are ended rows, and once every group sorts by
-       * recency they interleave with this run's endings correctly on their own.
-       * The `restored` flag is still on the entity — Resume and `endedReason`
-       * both read it — it simply no longer partitions anything.
-       *
-       * This selector exists precisely to keep the caret and the rows agreeing
-       * about where "here" is, so the partition *and* the sort have to match
-       * `session-table.tsx` exactly. A flattening in a different order from the
-       * one on screen makes the down arrow skip a row and come back to it.
-       *
-       * **Three** buckets since HIVE-117, because the table draws three. The
-       * agents sit between the two session groups, ranked by `rankedAgents` —
-       * the same function the table's own group is drawn from, not a second
-       * copy of its rule. Without them here an agent row was still *selectable*
-       * (it renders the caret and sets `selId` on click) while being absent
-       * from the order every arrow key consults: `↓` from one teleported to the
-       * first session, `↑` to the last ended row, and `→` opened nothing at all
-       * because `console-input.tsx` gates on membership of this list.
-       *
-       * **Four** since terminals, and the new bucket sits directly after the
-       * active sessions — where the tree draws it. Terminals keep `order`
-       * rather than being sorted by recency: they have no `endedAt` and no
-       * resume, so the only thing `recencyOf` could read is `createdAt`, and
-       * "the order they were opened in" is what a shell's own numbering already
-       * says.
-       */
-      const active: string[] = [];
-      const terminals: string[] = [];
-      const ended: string[] = [];
-      for (const id of state.order) {
+      const terminals = state.order.filter((id) => {
         const entity = state.entities[id];
-        if (!entity) continue;
-        if (isTerminal(entity)) {
-          terminals.push(id);
-          continue;
-        }
-        if (!isSession(entity)) continue;
-        if (isEnded(entity.status)) ended.push(id);
-        else active.push(id);
-      }
-      return [
-        ...byRecency(active, state.entities),
-        ...terminals,
-        ...rankedAgents(state.agentOrder, state.entities),
-        ...byRecency(ended, state.entities),
-      ];
+        return entity !== undefined && isTerminal(entity);
+      });
+      return [...navOrderOf(state), ...terminals];
     }),
   );
 
