@@ -244,7 +244,7 @@ describe('remote composition (HIVE-143)', () => {
     registerIpcHandlers();
 
     /*
-      89 call + 6 notify. Asserted as the total so a channel added to the
+      90 call + 6 notify. Asserted as the total so a channel added to the
       contract without a handler — or a `handle`/`on` call that stopped
       recording — fails here rather than at a socket.
 
@@ -254,7 +254,7 @@ describe('remote composition (HIVE-143)', () => {
       elsewhere, by the real `ipcMain.handle` refusing a second handler for a
       channel — not by this number.
     */
-    expect(remoteRegistrySize()).toBe(95);
+    expect(remoteRegistrySize()).toBe(96);
   });
 
   it('empties the registry on reset, so a socket sees not-ready rather than a stale handler', () => {
