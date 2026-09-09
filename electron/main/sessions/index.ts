@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import type { AgentsDirectory } from '@shared/agent-contract';
-import { AUTH_ENV_KEYS, ENV_PLACEHOLDER, type ConfigSnapshot } from '@shared/config-contract';
+import {
+  AUTH_ENV_KEYS,
+  ENV_PLACEHOLDER,
+  type ConfigSnapshot,
+  type ProjectConfig,
+} from '@shared/config-contract';
 import {
   HOOK_ENV_RECEIVER_URL,
   type HookNotificationType,
@@ -1964,22 +1969,33 @@ export function createSessions(options: SessionsOptions): Sessions {
     });
   }
 
+  /**
+   * The project a spawn may open, or the refusal that names the file to edit.
+   *
+   * Shared by `spawn` and `openTerminal` — both resolve a project from the
+   * same snapshot the same way, and a session and a terminal give the user the
+   * identical message to act on when the id does not resolve to a usable
+   * directory. Narrows `path` to `string`, which is what every caller does
+   * with it immediately afterwards (`cwd: project.path`).
+   */
+  function requireMappedProject(
+    snapshot: ConfigSnapshot,
+    projectId: string,
+  ): ProjectConfig & { path: string } {
+    const project = snapshot.projects.find((entry) => entry.id === projectId);
+    if (!project || project.status !== 'ok' || project.path === null) {
+      throw new Error(
+        spawnRefusal({ reason: 'unmapped', projectId, configPath: snapshot.configPath }),
+      );
+    }
+    return project as ProjectConfig & { path: string };
+  }
+
   /** Refuse with a message the user can act on, never a generic failure. */
   function spawn(request: OpenRequest): void {
     const snapshot = config();
 
-    const project = snapshot.projects.find(
-      (entry) => entry.id === request.projectId,
-    );
-    if (!project || project.status !== 'ok' || project.path === null) {
-      throw new Error(
-        spawnRefusal({
-          reason: 'unmapped',
-          projectId: request.projectId,
-          configPath: snapshot.configPath,
-        }),
-      );
-    }
+    const project = requireMappedProject(snapshot, request.projectId);
 
     /**
      * A new generation starts with no status history.
@@ -2484,12 +2500,7 @@ export function createSessions(options: SessionsOptions): Sessions {
       if (registry.sessionFor(request.entityId) !== undefined) return;
 
       const snapshot = config();
-      const project = snapshot.projects.find((entry) => entry.id === request.projectId);
-      if (!project || project.status !== 'ok' || project.path === null) {
-        throw new Error(
-          spawnRefusal({ reason: 'unmapped', projectId: request.projectId, configPath: snapshot.configPath }),
-        );
-      }
+      const project = requireMappedProject(snapshot, request.projectId);
       const runtime = effectiveRuntime(snapshot, project);
 
       terminalEntities.add(request.entityId);

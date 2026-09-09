@@ -79,6 +79,7 @@ let spawned: {
   shell: string;
   args: string[];
   cwd: string;
+  env: Record<string, string>;
   /** Absent for a command session, which has no authentication to decide. */
   stripEnv?: readonly string[];
   /** Set only for a terminal (terminals). */
@@ -147,6 +148,7 @@ function fakeSupervisor(): PtyHostSupervisor {
         shell: string;
         args: string[];
         cwd: string;
+        env: Record<string, string>;
         stripEnv?: readonly string[];
         foreground?: true;
       }) => {
@@ -3150,6 +3152,7 @@ describe('terminals', () => {
       shell: '/bin/zsh',
       args: ['-l'],
       cwd: '/repos/nova-web',
+      env: {},
       foreground: true,
     });
     // A terminal has no authentication to decide, so nothing is stripped.
