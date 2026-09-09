@@ -3868,6 +3868,20 @@ describe('hive-store', () => {
    * make every one of them a statement about this feature.
    */
   describe('terminals', () => {
+    it('spawnTerminal records and sends a directory when given one', () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      const id = useHiveStore.getState().spawnTerminal('nova-web', { cwd: '/repos/nova-web/pkg' });
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ cwd: '/repos/nova-web/pkg' });
+      expect(requestSpawnTerminal).toHaveBeenCalledWith(id, 'nova-web', '/repos/nova-web/pkg');
+    });
+
+    it('spawnTerminal without a directory sends none and records the project path', () => {
+      vi.mocked(isDesktop).mockReturnValue(true);
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      expect(useHiveStore.getState().entities[id]).toMatchObject({ cwd: '/repos/nova-web' });
+      expect(requestSpawnTerminal).toHaveBeenCalledWith(id, 'nova-web', undefined);
+    });
+
     it('spawnTerminal mints term-NN, opens the tab, and asks for a plain shell on desktop', () => {
       vi.mocked(isDesktop).mockReturnValue(true);
       const id = useHiveStore.getState().spawnTerminal('nova-web');
@@ -3887,7 +3901,7 @@ describe('hive-store', () => {
       expect(entity).not.toHaveProperty('foreground');
       expect(useHiveStore.getState().order.at(-1)).toBe(id);
       expect(useUiStore.getState().activeTab).toBe(id);
-      expect(requestSpawnTerminal).toHaveBeenCalledWith(id, 'nova-web');
+      expect(requestSpawnTerminal).toHaveBeenCalledWith(id, 'nova-web', undefined);
       // The one mistake that would put `claude` in a window opened as a shell.
       expect(requestSpawn).not.toHaveBeenCalled();
     });

@@ -298,6 +298,16 @@ export interface SetSessionTicketOptions {
   source?: 'prompt' | 'branch' | 'rename';
 }
 
+/** What `spawnTerminal` may be told beyond the project (entry points). */
+export interface SpawnTerminalOptions {
+  /**
+   * Where the shell starts. Absent means the project's path. "Terminal here"
+   * passes a session's observed cwd, which differs from the project path
+   * exactly when the session has moved into a worktree.
+   */
+  cwd?: string;
+}
+
 interface HiveState {
   entities: Record<string, Entity>;
   order: string[];
@@ -438,7 +448,12 @@ interface HiveState {
    * (terminals). The entity is created at once; on desktop the spawn is asked
    * for and a refusal is written to the console, as `spawnSession` does.
    */
-  spawnTerminal: (projectId: string) => string;
+  /**
+   * Open a terminal in a project: a login shell with no Claude typed into it
+   * (terminals). `options.cwd` is "terminal here" naming where the shell
+   * starts; absent means the project's path.
+   */
+  spawnTerminal: (projectId: string, options?: SpawnTerminalOptions) => string;
   /**
    * The host reported what holds the tty. `null` is the prompt. Status is
    * derived here, in the same write — the only writer of either field.
@@ -1937,7 +1952,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * is here rather than left to the surface: main's message names the config
    * file to edit, and the console is the only place with room to say so.
    */
-  spawnTerminal: (projectId) => {
+  spawnTerminal: (projectId, options = {}) => {
     const id = nextTerminalId(get().entities);
 
     const terminal: Terminal = {
@@ -1945,14 +1960,14 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
       id,
       project: projectId,
       /**
-       * The project's path, or empty when the config cannot answer.
+       * The directory the shell starts in: the caller's when it named one,
+       * else the project's path, else empty when the config cannot answer.
        *
        * Empty rather than a guess: the row shows a `cwd` tail and an invented
-       * one would name a directory the shell is not in. Main resolves the real
-       * working directory for the spawn regardless — this field is what the row
-       * *displays*, not what the pty is started with.
+       * one would name a directory the shell is not in. Main starts the pty at
+       * the project's path when this is empty.
        */
-      cwd: projectPath(projectId) ?? '',
+      cwd: options.cwd ?? projectPath(projectId) ?? '',
       status: 'prompt',
       createdAt: Date.now(),
       /**
@@ -1970,7 +1985,7 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
     }));
 
     if (isDesktop()) {
-      void requestSpawnTerminal(id, projectId).then((outcome) => {
+      void requestSpawnTerminal(id, projectId, options.cwd).then((outcome) => {
         if (outcome.ok) return;
         set((state) => ({
           orchLines: capLines([
