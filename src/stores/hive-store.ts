@@ -51,6 +51,7 @@ import {
 import { noteSessionPr, noteSessionTicket } from '@lib/session-history';
 import { pickPhrase } from '@lib/swarm/phrases';
 import {
+  closeChannel,
   reopenChannel,
   requestSpawn,
   requestSpawnTerminal,
@@ -1886,10 +1887,16 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
    * An unchanged name returns before the `set`, so a poll that finds the same
    * process every second does not re-render every subscriber of the entities
    * map for a fact that did not move.
+   *
+   * **A lost terminal is not updated.** The poll runs on an interval and its
+   * answer arrives asynchronously, so a reading taken before the shell died can
+   * land after {@link HiveState.markTerminalLost} — which would flip a dead row
+   * back to `running` beside the cover explaining that it is over.
    */
   setTerminalForeground: (id, name) => {
     const current = get().entities[id];
     if (!current || !isTerminal(current)) return;
+    if (current.ended !== undefined) return;
     if ((current.foreground ?? null) === name) return;
 
     set((state) => {
@@ -1956,6 +1963,14 @@ export const useHiveStore = create<HiveState>()((set, get) => ({
         order: state.order.filter((entityId) => entityId !== id),
       };
     });
+
+    /*
+      The renderer's channel goes with the row (terminals). Nothing will ever
+      switch back to this id, so its replay buffer and its three bridge
+      subscriptions have no reader left — and this map is never otherwise swept,
+      so a day of opening and closing shells would grow it without bound.
+    */
+    closeChannel(id);
 
     /*
       Cross-store, so the other store's action is called explicitly — no store

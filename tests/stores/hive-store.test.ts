@@ -28,6 +28,7 @@ import {
 } from '@lib/project-config';
 import { noteSessionTicket } from '@lib/session-history';
 import {
+  closeChannel,
   reopenChannel,
   requestSpawn,
   requestSpawnTerminal,
@@ -94,6 +95,8 @@ vi.mock('@lib/terminal/pty-transport', () => ({
   requestSpawn: vi.fn(() => Promise.resolve({ ok: true })),
   /** The same fire-and-forget bargain for a plain shell (terminals). */
   requestSpawnTerminal: vi.fn(() => Promise.resolve({ ok: true })),
+  /** `removeTerminal` ends the channel with the row (terminals). */
+  closeChannel: vi.fn(),
   sessionChannelState: vi.fn(() => 'live'),
   resetPtyChannels: vi.fn(),
   // HIVE-93: `resumeSession` clears the renderer's exit latch before asking
@@ -3873,6 +3876,9 @@ describe('hive-store', () => {
       expect(entity).toMatchObject({
         kind: 'terminal',
         project: 'nova-web',
+        // Read from the config, not invented: `seedDemoProjectConfig` maps
+        // `nova-web` here, and the row's `cwd` tail is drawn from it.
+        cwd: '/repos/nova-web',
         status: 'prompt',
         lines: [],
       });
@@ -3957,6 +3963,22 @@ describe('hive-store', () => {
       expect(useHiveStore.getState().entities).toBe(before);
     });
 
+    it('setTerminalForeground ignores a terminal that has been lost', () => {
+      /*
+        The poll runs on an interval and answers asynchronously, so a reading
+        taken before the shell died can land after `markTerminalLost` — and
+        without this guard a dead row flips back to `running` underneath the
+        cover explaining that it is over.
+      */
+      const id = useHiveStore.getState().spawnTerminal('nova-web');
+      useHiveStore.getState().markTerminalLost(id, 'the pty host crashed');
+      const before = useHiveStore.getState().entities;
+
+      useHiveStore.getState().setTerminalForeground(id, 'vitest');
+
+      expect(useHiveStore.getState().entities).toBe(before);
+    });
+
     it('markTerminalLost keeps the row and records why', () => {
       const id = useHiveStore.getState().spawnTerminal('nova-web');
 
@@ -3988,6 +4010,9 @@ describe('hive-store', () => {
       expect(useHiveStore.getState().entities[id]).toBeUndefined();
       expect(useHiveStore.getState().order).not.toContain(id);
       expect(useUiStore.getState().activeTab).toBe('orch');
+      // The renderer's channel goes with the row: nothing will switch back to
+      // this id, so its replay buffer and bridge listeners have no reader left.
+      expect(closeChannel).toHaveBeenCalledWith(id);
     });
 
     it('removeTerminal leaves another tab alone', () => {

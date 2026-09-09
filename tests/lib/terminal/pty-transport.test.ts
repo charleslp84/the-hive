@@ -5,6 +5,7 @@ import { toSgrIndexed } from '@lib/terminal/ansi';
 import {
   DEFAULT_COLS,
   DEFAULT_ROWS,
+  closeChannel,
   createCloneTransport,
   createPtyTransport,
   createTerminalTransport,
@@ -595,6 +596,37 @@ describe('reopenChannel', () => {
 
   it('is a no-op for an entity that never had a channel', () => {
     expect(() => reopenChannel('never-seen')).not.toThrow();
+  });
+});
+
+/**
+ * Ending a channel rather than clearing it (terminals).
+ *
+ * `reopenChannel` and `resetCloneChannel` both keep the channel and wipe parts
+ * of it, because something is coming back. Nothing comes back to a removed
+ * terminal, so its buffer and its three bridge listeners have no reader left —
+ * and this map is never otherwise swept.
+ */
+describe('closeChannel', () => {
+  it('forgets the entity and unsubscribes its listeners', () => {
+    const seen: string[] = [];
+    createTerminalTransport('term-05', 'nova-web').onData((chunk) =>
+      seen.push(chunk),
+    );
+
+    closeChannel('term-05');
+    pushData('term-05', 'output after the row was removed', 1);
+
+    expect(sessionChannelState('term-05')).toBe('none');
+    expect(seen).toEqual([]);
+    // The three bridge subscriptions are gone, not merely ignored.
+    expect(bridge.data.size).toBe(0);
+    expect(bridge.exit.size).toBe(0);
+    expect(bridge.lost.size).toBe(0);
+  });
+
+  it('is a no-op for an entity that never had a channel', () => {
+    expect(() => closeChannel('never-seen')).not.toThrow();
   });
 });
 
