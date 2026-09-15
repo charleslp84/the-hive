@@ -2,8 +2,9 @@
  * The project filesystem layer — the explorer and the editor.
  *
  * A thin composition point: the read verbs are in `read.ts` and `search.ts`,
- * the write in `write.ts`,
- * the containment guard is in `paths.ts`, and the watcher is in `watcher.ts`.
+ * the write in `write.ts`, the one that turns printed text into a `relPath` in
+ * `resolve.ts`, the containment guard is in `paths.ts`, and the watcher is in
+ * `watcher.ts`.
  * This file exists so `ipc/index.ts` imports one thing and so the watcher has
  * a lifetime that `resetIpcHandlers` can end.
  */

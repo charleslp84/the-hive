@@ -10,6 +10,8 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { execFileSync } from 'node:child_process';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectConfig } from '../../../../electron/shared/config-contract';
@@ -128,6 +130,24 @@ describe('resolvePaths', () => {
     ]);
   });
 
+  /**
+   * The homonym is the whole test.
+   *
+   * `util.ts` exists under *both* bases, so this is the only case that can
+   * tell the order apart — every other candidate here exists under one base or
+   * the other, and would answer the same if `bases` were reversed. Getting
+   * this backwards is the failure `resolveOne`'s own comment describes: a
+   * different file with the same name, handed over as the one that was
+   * clicked.
+   */
+  it('prefers the session cwd over the root for a name that exists under both', async () => {
+    file('util.ts');
+    setSessionCwdLookup(() => join(root, 'src', 'lib'));
+    await expect(verdicts(['util.ts'], 'sess')).resolves.toEqual([
+      { relPath: 'src/lib/util.ts', rootKey: '' },
+    ]);
+  });
+
   it('resolves a relative candidate against the session cwd before the root', async () => {
     setSessionCwdLookup((id) =>
       id === 'sess' ? join(root, 'src', 'lib') : undefined,
@@ -172,6 +192,58 @@ describe('resolvePaths', () => {
       ok: true,
       value: { resolved: [] },
     });
+  });
+
+  /**
+   * The widened root, on a real linked worktree.
+   *
+   * `rootKey` is `''` in every other case here, so without this the
+   * `session ?? ''` branch that exists *because* of worktrees is never
+   * observed on its worktree side — and that branch is what keeps the editor's
+   * buffer key honest: `src/app.ts` in the project and `src/app.ts` in a
+   * worktree are two files, and they collide under one key unless the root
+   * comes back with them. Real git, as `session-roots.test.ts` does, because
+   * `git rev-parse --git-common-dir` is the whole mechanism being trusted.
+   */
+  it('answers relative to a linked worktree, and names it as the root', async () => {
+    const git = (cwd: string, ...args: string[]): void => {
+      execFileSync('git', ['-C', cwd, ...args], { stdio: 'ignore' });
+    };
+    const repo = realpathSync(mkdtempSync(join(tmpdir(), 'hive-fs-resolve-repo-')));
+    const tree = join(
+      realpathSync(mkdtempSync(join(tmpdir(), 'hive-fs-resolve-wt-'))),
+      'wt',
+    );
+    try {
+      mkdirSync(join(repo, 'src'), { recursive: true });
+      writeFileSync(join(repo, 'src', 'app.ts'), 'export {};\n');
+      git(repo, 'init', '-q', '-b', 'main');
+      git(repo, 'config', 'user.email', 'test@example.com');
+      git(repo, 'config', 'user.name', 'Test');
+      git(repo, 'add', '.');
+      git(repo, 'commit', '-qm', 'first');
+      git(repo, 'worktree', 'add', '-q', tree, '-b', 'feature');
+
+      // Untracked, and written after the worktree was added, so it exists in
+      // the project checkout and nowhere else.
+      writeFileSync(join(repo, 'only-in-project.ts'), 'x');
+
+      projects[0] = { ...projects[0]!, path: repo };
+      const worktree = realpathSync(tree);
+      setSessionCwdLookup(() => worktree);
+
+      await expect(
+        verdicts(['src/app.ts', 'only-in-project.ts'], 'sess'),
+      ).resolves.toEqual([
+        { relPath: 'src/app.ts', rootKey: worktree },
+        // Proof the root really moved rather than merely being reported:
+        // this file is in the project and is now out of reach.
+        null,
+      ]);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+      rmSync(dirname(tree), { recursive: true, force: true });
+    }
   });
 
   it('fails as a whole only for an unknown project', async () => {

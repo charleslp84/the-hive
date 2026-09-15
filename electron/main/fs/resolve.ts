@@ -7,7 +7,7 @@ import type {
   ResolveRequest,
   ResolveResult,
   ResolvedLink,
-} from '../../shared/fs-contract';
+} from '@shared/fs-contract';
 
 import { contains } from './contains';
 import { asFailure, projectRoot } from './paths';
@@ -52,7 +52,12 @@ export async function resolvePaths(
     const rootKey = session ?? '';
 
     const cwd = await cwdWithin(root, request.sessionId);
-    const bases = cwd === null ? [root] : [cwd, root];
+    /*
+      One base when the session is sitting at the root, which is the ordinary
+      case rather than the odd one: `[root, root]` would `realpath` every
+      candidate twice to reach the same verdict.
+    */
+    const bases = cwd === null || cwd === root ? [root] : [cwd, root];
 
     const resolved = await Promise.all(
       request.candidates.map((candidate) =>
