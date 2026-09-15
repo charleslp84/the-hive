@@ -304,6 +304,19 @@ describe('parseResolveRequest', () => {
     ).toThrow(/expected an array/);
   });
 
+  /**
+   * `.map` skips holes, so a sparse array would walk past every per-element
+   * check below and come back as a `string[]` of `undefined`s with nothing
+   * thrown — and `v8.serialize`, the channel this actually crosses, preserves
+   * holes. The same trap `parseSkillFileDropRequest` and
+   * `parseReorderProjectsRequest` document.
+   */
+  it('rejects a sparse array, whose holes would otherwise skip every check', () => {
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: new Array(2) }),
+    ).toThrow(/expected a string/);
+  });
+
   it('rejects a non-string, an empty string and a control character', () => {
     expect(() =>
       parseResolveRequest({ projectId: 'demo', candidates: [1] }),
@@ -317,6 +330,14 @@ describe('parseResolveRequest', () => {
     expect(() =>
       parseResolveRequest({ projectId: 'demo', candidates: ['a\u001bb'] }),
     ).toThrow(/control characters/);
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: ['a\u007fb'] }),
+    ).toThrow(/control characters/);
+    // U+009B is the 8-bit CSI introducer, and terminal output is where these
+    // candidates come from. Four of the five sweeps in this file reject C1.
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: ['a\u009bb'] }),
+    ).toThrow(/control characters/);
   });
 
   it('rejects an over-long candidate', () => {
@@ -328,6 +349,11 @@ describe('parseResolveRequest', () => {
   it('rejects a malformed project id and an unexpected key', () => {
     expect(() =>
       parseResolveRequest({ projectId: 'a/b', candidates: [] }),
+    ).toThrow(/malformed id/);
+    // Declaration order, the convention stated at `parseSkillFileWriteRequest`:
+    // a doubly-wrong request reports the field named first in the shape.
+    expect(() =>
+      parseResolveRequest({ projectId: 'a/b', candidates: 'x' }),
     ).toThrow(/malformed id/);
     expect(() => parseResolveRequest({ ...good, relPath: 'x' })).toThrow(
       /unexpected key/,
