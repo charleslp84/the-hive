@@ -17,6 +17,20 @@ export interface MockTerminalOptions {
   [key: string]: unknown;
 }
 
+/** Enough of xterm's `ILink` for a test to drive one. */
+export interface MockLink {
+  text: string;
+  range: { start: { x: number; y: number }; end: { x: number; y: number } };
+  activate(event: MouseEvent, text: string): void;
+  hover?(event: MouseEvent, text: string): void;
+  leave?(event: MouseEvent, text: string): void;
+}
+
+/** Enough of xterm's `ILinkProvider`. */
+export interface MockLinkProvider {
+  provideLinks(y: number, callback: (links: MockLink[] | undefined) => void): void;
+}
+
 /** Every instance constructed during a test, in construction order. */
 export const terminalInstances: MockTerminal[] = [];
 
@@ -126,6 +140,27 @@ export class MockTerminal {
    */
   keyEventHandler: ((event: KeyboardEvent) => boolean) | null = null;
   selection = '';
+
+  /**
+   * Link providers the surface registers (terminal file links).
+   *
+   * Recorded rather than invoked, for the same reason as the key handler
+   * above: `provideLinks` is a decision over a line of text, so a test drives
+   * it directly against staged {@link bufferLines} and asserts what comes
+   * back. Real xterm would need a *rendered* row and a real mouse over it,
+   * and the WebGL renderer paints the row into a canvas with no node to hover.
+   */
+  readonly linkProviders: MockLinkProvider[] = [];
+
+  registerLinkProvider(provider: MockLinkProvider) {
+    this.linkProviders.push(provider);
+    return {
+      dispose: () => {
+        const at = this.linkProviders.indexOf(provider);
+        if (at >= 0) this.linkProviders.splice(at, 1);
+      },
+    };
+  }
 
   private readonly dataListeners = new Set<(data: string) => void>();
 

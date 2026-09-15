@@ -8,6 +8,10 @@ import { isMacPlatform } from '@lib/platform';
 import { xtermThemeFor, type TermPalette } from '@lib/terminal/ansi';
 import { shouldAutoScroll } from '@lib/terminal/auto-scroll';
 import {
+  createFileLinkProvider,
+  type FileLinkTarget,
+} from '@lib/terminal/file-links';
+import {
   FRAME_SCAN,
   isBareBack,
   isEmptyClaudePrompt,
@@ -22,6 +26,7 @@ import {
 } from '@lib/terminal/keymap';
 import { handleWebLink, terminalLinkHandler } from '@lib/terminal/open-link';
 import type { PromptInput, TerminalTransport } from '@lib/terminal/terminal-transport';
+import type { ResolvedLink } from '@shared/fs-contract';
 
 import '@xterm/xterm/css/xterm.css';
 
@@ -90,6 +95,22 @@ interface TerminalSurfaceProps {
    * including the one the user presses to leave.
    */
   ended?: boolean;
+  /**
+   * File links: which printed strings are files, and what to do about one.
+   *
+   * Both opaque, exactly as {@link TerminalSurfaceProps.palette} is. This
+   * component learns that some strings can be resolved and that a resolved one
+   * can be opened; which project, which session and which editor is the
+   * composition root's business, and has to stay there — `components/terminal/`
+   * may not import `stores/`, and a path is only a *file* relative to a
+   * session this component has never heard of.
+   *
+   * Absent either one, no provider is registered and paths never underline:
+   * the orchestrator console, the browser target, and the clone view all take
+   * that branch.
+   */
+  resolveFileLinks?: (paths: string[]) => Promise<Array<ResolvedLink | null>>;
+  onOpenFile?: (target: FileLinkTarget) => void;
 }
 
 /** What the mount effect builds, held together so dependents can re-run. */
@@ -282,6 +303,8 @@ export function TerminalSurface({
   readOnly = false,
   visible = true,
   ended = false,
+  resolveFileLinks,
+  onOpenFile,
 }: TerminalSurfaceProps) {
   /**
    * Container and instance both live in state behind callback refs rather than
@@ -365,6 +388,19 @@ export function TerminalSurface({
    */
   const lastPromptRef = useRef<PromptInput | null>(null);
 
+  /**
+   * Same reason as {@link transportRef}: the link provider is installed once,
+   * in the mount effect, and this surface is kept alive across every tab
+   * switch. A resolver captured at construction would go on answering for the
+   * session that was on screen when the terminal was built — so a path would
+   * resolve against the wrong project and open the wrong file, silently,
+   * because both answers have the same shape.
+   */
+  const fileLinksRef = useRef({ resolveFileLinks, onOpenFile });
+  useEffect(() => {
+    fileLinksRef.current = { resolveFileLinks, onOpenFile };
+  }, [resolveFileLinks, onOpenFile]);
+
   useEffect(() => {
     if (!container) return;
 
@@ -427,6 +463,28 @@ export function TerminalSurface({
     */
     terminal.loadAddon(new WebLinksAddon(handleWebLink));
 
+    const isMac = isMacPlatform();
+
+    /*
+      Paths, as distinct from URLs: `⌘`-click (Ctrl elsewhere) opens the file
+      on the stage. The decision of what is path-shaped and what a click means
+      is `lib/terminal/file-links.ts`'s, so it can be tested against a table of
+      real compiler output; what this layer adds is the two things only it has,
+      a buffer to read the row from and the platform. `decideTerminalKey`
+      already treats that modifier as "the app's" for keystrokes, and a click
+      follows the same rule.
+    */
+    const fileLinks = terminal.registerLinkProvider(
+      createFileLinkProvider({
+        readLine: (y) => terminal.buffer.active.getLine(y - 1)?.translateToString(true),
+        resolve: (paths) =>
+          fileLinksRef.current.resolveFileLinks?.(paths) ??
+          Promise.resolve(paths.map(() => null)),
+        open: (target) => fileLinksRef.current.onOpenFile?.(target),
+        isModified: (event) => (isMac ? event.metaKey : event.ctrlKey),
+      }),
+    );
+
     /**
      * Who owns a keystroke (story 095). Read-only surfaces skip it entirely —
      * they send nothing to a pty, so there is no conflict to arbitrate, and
@@ -434,7 +492,6 @@ export function TerminalSurface({
      * the console's own test exists to catch.
      */
     if (!readOnly) {
-      const isMac = isMacPlatform();
       terminal.attachCustomKeyEventHandler((event) => {
         // `keypress`/`keyup` arrive here too. Deciding on anything but keydown
         // would run the copy twice and fight the pty for the same chord.
@@ -617,6 +674,7 @@ export function TerminalSurface({
 
     return () => {
       resizeObserver.disconnect();
+      fileLinks.dispose();
       terminal.dispose();
       setInstance(null);
     };
