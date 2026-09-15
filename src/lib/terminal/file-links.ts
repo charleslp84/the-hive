@@ -14,6 +14,8 @@
  * instead of against a rendered terminal.
  */
 
+import type { ResolvedLink } from '@shared/fs-contract';
+
 /** A path-shaped run in one line. `start` is 0-based, `end` exclusive. */
 export interface FileLinkCandidate {
   text: string;
@@ -119,4 +121,144 @@ export function splitPosition(text: string): {
 
   const col = hit[3] === undefined ? undefined : Number(hit[3]);
   return { path, line, ...(col !== undefined && col >= 1 ? { col } : {}) };
+}
+
+/** xterm's `IBufferRange`: 1-based columns and rows, `end` inclusive. */
+export interface LinkRange {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
+/** What `open` receives. `line` and `col` are 1-based when present. */
+export interface FileLinkTarget extends ResolvedLink {
+  line?: number;
+  col?: number;
+}
+
+/** The shape of xterm's `ILink`, minus the decorations this never sets. */
+export interface FileLink {
+  range: LinkRange;
+  text: string;
+  activate(event: MouseEvent, text: string): void;
+  hover?(event: MouseEvent, text: string): void;
+  leave?(event: MouseEvent, text: string): void;
+}
+
+/** The shape of xterm's `ILinkProvider`. */
+export interface FileLinkProvider {
+  provideLinks(y: number, callback: (links: FileLink[] | undefined) => void): void;
+}
+
+export interface FileLinkProviderOptions {
+  /** Row `y` (1-based, as xterm passes it) as text, or `undefined` past the end. */
+  readLine: (y: number) => string | undefined;
+  /** Bare paths in, index-aligned verdicts out. A rejection reads as all-`null`. */
+  resolve: (paths: string[]) => Promise<Array<ResolvedLink | null>>;
+  open: (target: FileLinkTarget) => void;
+  /** Whether this click carries the platform's open modifier. */
+  isModified: (event: MouseEvent) => boolean;
+  hover?: (text: string) => void;
+  leave?: () => void;
+}
+
+/**
+ * Lines whose verdicts are kept.
+ *
+ * Far below the 5k scrollback on purpose: this exists so that reading back
+ * over output already hovered does not re-ask, not so that the whole buffer is
+ * held in memory.
+ */
+export const MEMO_LINES = 256;
+
+/**
+ * The xterm link provider for file paths.
+ *
+ * Typed structurally rather than against `ILinkProvider`, which keeps this
+ * module free of an `@xterm` import; the surface hands it to
+ * `registerLinkProvider`, where the real type is checked.
+ *
+ * **The modifier is the whole difference from a URL.** A URL in terminal
+ * output is opened by a plain click, which is what this app already decided
+ * and what iTerm2 does. A path cannot be: the text under a path is text the
+ * user selects and copies constantly, and a plain click that opened a file
+ * would take the click-drag that starts on one. So `activate` does nothing
+ * without the modifier and xterm's own selection runs, exactly as VS Code
+ * behaves.
+ */
+export function createFileLinkProvider(
+  options: FileLinkProviderOptions,
+): FileLinkProvider {
+  /**
+   * Verdicts by **line text**, not by row.
+   *
+   * Rows move: the same output is at a different `y` after one scroll, and a
+   * row-keyed memo would miss on every one of them. The text is what was
+   * actually asked about.
+   */
+  const memo = new Map<string, Promise<Array<ResolvedLink | null>>>();
+
+  const verdictsFor = (
+    line: string,
+    paths: string[],
+  ): Promise<Array<ResolvedLink | null>> => {
+    const kept = memo.get(line);
+    if (kept) return kept;
+
+    // The rejection is absorbed here rather than at the call site so the memo
+    // never holds a promise that rejects on its second reader.
+    const pending = options.resolve(paths).catch(() => paths.map(() => null));
+    memo.set(line, pending);
+
+    if (memo.size > MEMO_LINES) {
+      const oldest = memo.keys().next().value;
+      if (oldest !== undefined) memo.delete(oldest);
+    }
+    return pending;
+  };
+
+  return {
+    provideLinks(y, callback) {
+      const line = options.readLine(y);
+      const candidates = line === undefined ? [] : findCandidates(line);
+      if (line === undefined || candidates.length === 0) {
+        callback(undefined);
+        return;
+      }
+
+      const positions = candidates.map((candidate) => splitPosition(candidate.text));
+
+      void verdictsFor(
+        line,
+        positions.map((position) => position.path),
+      ).then((verdicts) => {
+        const links = candidates.flatMap((candidate, index): FileLink[] => {
+          const hit = verdicts[index];
+          const position = positions[index];
+          if (!hit || !position) return [];
+
+          const target: FileLinkTarget = {
+            ...hit,
+            ...(position.line === undefined ? {} : { line: position.line }),
+            ...(position.col === undefined ? {} : { col: position.col }),
+          };
+
+          return [
+            {
+              // xterm counts from 1 and includes `end`; `candidate` is 0-based
+              // and excludes it, so only `start` shifts.
+              range: { start: { x: candidate.start + 1, y }, end: { x: candidate.end, y } },
+              text: candidate.text,
+              activate: (event) => {
+                if (options.isModified(event)) options.open(target);
+              },
+              hover: () => options.hover?.(candidate.text),
+              leave: () => options.leave?.(),
+            },
+          ];
+        });
+
+        callback(links.length === 0 ? undefined : links);
+      });
+    },
+  };
 }
