@@ -8,6 +8,7 @@
  * a lifetime that `resetIpcHandlers` can end.
  */
 export { readDirectory, readFileContent, readRoot } from './read';
+export { resolvePaths } from './resolve';
 export { browseHomeDirectory } from './home-browse';
 export { searchProject } from './search';
 export { writeFileContent } from './write';
@@ -23,6 +24,7 @@ export {
 } from './paths';
 export {
   forgetProbedRoots,
+  observedSessionCwd,
   sessionRoot,
   setSessionCwdLookup,
   type SessionCwdLookup,
