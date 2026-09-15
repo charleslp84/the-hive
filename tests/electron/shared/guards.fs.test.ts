@@ -4,11 +4,15 @@ import {
   assertRelPath,
   parseReadDirRequest,
   parseReadFileRequest,
+  parseResolveRequest,
   parseSearchRequest,
   parseWatchRequest,
   parseWriteFileRequest,
 } from '../../../electron/shared/guards';
-import { MAX_FILE_BYTES } from '../../../electron/shared/fs-contract';
+import {
+  MAX_FILE_BYTES,
+  MAX_RESOLVE_CANDIDATES,
+} from '../../../electron/shared/fs-contract';
 
 /**
  * The fs payload guards.
@@ -251,5 +255,82 @@ describe('parseSearchRequest', () => {
       'sess-0z',
     );
     expect(() => parseSearchRequest({ ...good, relPath: '../etc' })).toThrow();
+  });
+});
+
+/**
+ * The one guard here that accepts absolute paths and `..` on purpose.
+ *
+ * A candidate is text a program printed, and containment in
+ * `electron/main/fs/resolve.ts` is the defence — a string check that refused
+ * `/abs/path` here would only stop the feature from working on the output
+ * every compiler prints, while granting nothing, because main refuses the same
+ * path a moment later on the evidence that actually settles it. What the
+ * string still owns is what a string can decide: shape, count, length, and the
+ * control characters no real path contains.
+ */
+describe('parseResolveRequest', () => {
+  const good = { projectId: 'demo', candidates: ['src/a.ts', '/tmp/x', '../y'] };
+
+  it('accepts relative, absolute and parent-relative candidates', () => {
+    expect(parseResolveRequest(good)).toEqual(good);
+  });
+
+  it('carries an optional session id', () => {
+    expect(parseResolveRequest({ ...good, sessionId: 'sess-1' }).sessionId).toBe(
+      'sess-1',
+    );
+  });
+
+  it('accepts an empty candidate list', () => {
+    expect(
+      parseResolveRequest({ projectId: 'demo', candidates: [] }).candidates,
+    ).toEqual([]);
+  });
+
+  it('rejects more candidates than the cap', () => {
+    const candidates = Array.from(
+      { length: MAX_RESOLVE_CANDIDATES + 1 },
+      (_unused, index) => `f${index}.ts`,
+    );
+    expect(() => parseResolveRequest({ projectId: 'demo', candidates })).toThrow(
+      /too many/,
+    );
+  });
+
+  it('rejects candidates that are not an array', () => {
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: 'src/a.ts' }),
+    ).toThrow(/expected an array/);
+  });
+
+  it('rejects a non-string, an empty string and a control character', () => {
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: [1] }),
+    ).toThrow(/expected a string/);
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: [''] }),
+    ).toThrow(/empty/);
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: ['a\u0000b'] }),
+    ).toThrow(/control characters/);
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: ['a\u001bb'] }),
+    ).toThrow(/control characters/);
+  });
+
+  it('rejects an over-long candidate', () => {
+    expect(() =>
+      parseResolveRequest({ projectId: 'demo', candidates: ['x'.repeat(1025)] }),
+    ).toThrow(/too long/);
+  });
+
+  it('rejects a malformed project id and an unexpected key', () => {
+    expect(() =>
+      parseResolveRequest({ projectId: 'a/b', candidates: [] }),
+    ).toThrow(/malformed id/);
+    expect(() => parseResolveRequest({ ...good, relPath: 'x' })).toThrow(
+      /unexpected key/,
+    );
   });
 });

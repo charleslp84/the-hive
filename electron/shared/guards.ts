@@ -62,12 +62,13 @@ import type {
 import type {
   ReadDirRequest,
   ReadFileRequest,
+  ResolveRequest,
   RootRequest,
   SearchRequest,
   WatchRequest,
   WriteFileRequest,
 } from './fs-contract';
-import { MAX_FILE_BYTES } from './fs-contract';
+import { MAX_FILE_BYTES, MAX_RESOLVE_CANDIDATES } from './fs-contract';
 import type { PrLookup } from './github-contract';
 import type {
   AckRequest,
@@ -2225,6 +2226,61 @@ export function parseRootRequest(input: unknown): RootRequest {
     ...(raw.sessionId !== undefined
       ? { sessionId: assertId(raw.sessionId, 'root.sessionId') }
       : {}),
+  };
+}
+
+/**
+ * `fs:resolve` — the one fs guard that admits absolute paths and `..`.
+ *
+ * Deliberately not {@link assertRelPath}. A candidate is text a program
+ * printed — `/Users/me/repo/src/a.ts` from tsc, `../lib/b.ts` from a test
+ * runner — and refusing those shapes here would refuse the feature while
+ * granting nothing: the path still has to survive `realpath` and a containment
+ * test in `electron/main/fs/resolve.ts`, which is the check that can actually
+ * see where a string lands. A guard that stopped at the shape would be the
+ * theatre `fs-contract.ts` warns about, in the other direction.
+ *
+ * What a string check still owns is checked: the shape of the payload, the
+ * count, the length, and the control characters no real path contains — the
+ * last of those because terminal output is where these come from, and an
+ * escape sequence is exactly what terminal output is full of.
+ */
+export function parseResolveRequest(input: unknown): ResolveRequest {
+  const raw = assertShape(
+    input,
+    ['projectId', 'candidates'],
+    'resolve',
+    ['sessionId'],
+  );
+  if (!Array.isArray(raw.candidates)) {
+    return fail(
+      `resolve.candidates: expected an array, got ${describe(raw.candidates)}`,
+    );
+  }
+  if (raw.candidates.length > MAX_RESOLVE_CANDIDATES) {
+    return fail('resolve.candidates: too many');
+  }
+
+  const candidates = raw.candidates.map((value, index) => {
+    const label = `resolve.candidates[${index}]`;
+    const candidate = assertString(value, label);
+    if (candidate === '') return fail(`${label}: empty`);
+    if (candidate.length > MAX_REL_PATH) return fail(`${label}: too long`);
+    for (const char of candidate) {
+      const code = char.codePointAt(0) ?? 0;
+      if (code < 0x20 || code === 0x7f) {
+        return fail(`${label}: control characters are not allowed`);
+      }
+    }
+    return candidate;
+  });
+
+  return {
+    projectId: assertId(raw.projectId, 'resolve.projectId'),
+    ...(raw.sessionId !== undefined
+      ? { sessionId: assertId(raw.sessionId, 'resolve.sessionId') }
+      : {}),
+    candidates,
   };
 }
 
