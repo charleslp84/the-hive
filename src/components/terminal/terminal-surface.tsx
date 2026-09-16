@@ -25,7 +25,7 @@ import {
   type CursorContext,
   type TerminalChordDetail,
 } from '@lib/terminal/keymap';
-import { handleWebLink, terminalLinkHandler } from '@lib/terminal/open-link';
+import { createTerminalLinkHandler, handleWebLink } from '@lib/terminal/open-link';
 import type { PromptInput, TerminalTransport } from '@lib/terminal/terminal-transport';
 import type { ResolvedLink } from '@shared/fs-contract';
 
@@ -475,7 +475,19 @@ export function TerminalSurface({
        * Both paths land on one handler so the two kinds of link cannot behave
        * differently, and the scheme check stays where it belongs — in main.
        */
-      linkHandler: terminalLinkHandler,
+      linkHandler: createTerminalLinkHandler((candidate) => {
+        /*
+          A `file://` hyperlink takes the same road a printed path takes: main
+          decides whether it names a file here, and the stage opens it. Without
+          this it reached `window.open`, whose allowlist is http(s) — so it was
+          detected, underlined, and dead on click.
+        */
+        void fileLinksRef.current
+          .resolveFileLinks?.([candidate])
+          .then(([hit]) => {
+            if (hit) fileLinksRef.current.onOpenFile?.(hit);
+          });
+      }),
       scrollback,
       /**
        * The floor that makes the surface slots safe (HIVE-82).

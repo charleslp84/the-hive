@@ -1726,6 +1726,35 @@ describe('TerminalSurface input-box report', () => {
       });
     });
 
+    it('an OSC 8 file:// link resolves and opens like a printed path', async () => {
+      const resolveFileLinks = vi.fn(async (paths: string[]) =>
+        paths.map(() => ({ relPath: 'src/a.ts', rootKey: '' })),
+      );
+      const onOpenFile = vi.fn();
+      render(
+        <TerminalSurface
+          transport={fakeTransport().transport}
+          palette={TERM}
+          resolveFileLinks={resolveFileLinks}
+          onOpenFile={onOpenFile}
+        />,
+      );
+
+      const handler = terminal().options.linkHandler as {
+        activate(event: MouseEvent, text: string): void;
+      };
+      // No modifier: an explicit hyperlink is activated the way it always was.
+      handler.activate(new MouseEvent('click'), 'file:///repo/src/a.ts');
+
+      await vi.waitFor(() => {
+        expect(onOpenFile).toHaveBeenCalledWith({
+          relPath: 'src/a.ts',
+          rootKey: '',
+        });
+      });
+      expect(resolveFileLinks).toHaveBeenCalledWith(['/repo/src/a.ts']);
+    });
+
     /**
      * The seam the wide-character fix actually lives at.
      *
