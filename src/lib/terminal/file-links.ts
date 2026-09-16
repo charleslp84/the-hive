@@ -215,7 +215,13 @@ export interface FileLinkProviderOptions {
   open: (target: FileLinkTarget) => void;
   /** Whether this click carries the platform's open modifier. */
   isModified: (event: MouseEvent) => boolean;
-  hover?: (text: string) => void;
+  /**
+   * The event rides along because the pointer is the only thing that knows
+   * where the link is on screen: the WebGL renderer paints the row into a
+   * canvas and exposes no public cell metrics, so a tooltip cannot be placed
+   * from the range alone.
+   */
+  hover?: (text: string, event: MouseEvent) => void;
   leave?: () => void;
 }
 
@@ -336,7 +342,7 @@ export function createFileLinkProvider(
               activate: (event) => {
                 if (options.isModified(event)) options.open(target);
               },
-              hover: () => options.hover?.(candidate.text),
+              hover: (event) => options.hover?.(candidate.text, event),
               leave: () => options.leave?.(),
             },
           ];

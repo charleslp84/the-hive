@@ -440,6 +440,16 @@ export function TerminalSurface({
   const lastPromptRef = useRef<PromptInput | null>(null);
 
   /**
+   * Where the pointer was when it entered a file link, or `null`.
+   *
+   * Anchored to the pointer rather than to the cell, which is not a choice so
+   * much as what is available: the WebGL renderer owns the row's pixels and
+   * publishes no cell metrics. The pointer is on the link by definition, which
+   * is good enough for a one-line hint and costs nothing to be right about.
+   */
+  const [linkTipAt, setLinkTipAt] = useState<{ x: number; y: number } | null>(null);
+
+  /**
    * Same reason as {@link transportRef}: the link provider is installed once,
    * in the mount effect, and this surface is kept alive across every tab
    * switch. A resolver captured at construction would go on answering for the
@@ -545,6 +555,8 @@ export function TerminalSurface({
           Promise.resolve(paths.map(() => null)),
         open: (target) => fileLinksRef.current.onOpenFile?.(target),
         isModified: (event) => (isMac ? event.metaKey : event.ctrlKey),
+        hover: (_text, event) => setLinkTipAt({ x: event.clientX, y: event.clientY }),
+        leave: () => setLinkTipAt(null),
       }),
     );
 
@@ -1079,6 +1091,21 @@ export function TerminalSurface({
       data-terminal-id={id}
     >
       <div ref={setContainer} className="h-full w-full" />
+
+      {linkTipAt ? (
+        /*
+          `pointer-events-none` so the tip never sits between the mouse and the
+          link it describes — xterm would see the pointer leave, clear the
+          link, and the tip would flicker itself out of existence.
+        */
+        <div
+          data-testid="terminal-link-tip"
+          className="pointer-events-none fixed z-50 rounded border border-border bg-panel px-2 py-1 text-[11px] text-ink shadow-md"
+          style={{ left: linkTipAt.x + 12, top: linkTipAt.y - 28 }}
+        >
+          {`Open in editor (${isMacPlatform() ? '⌘' : 'Ctrl'} + click)`}
+        </div>
+      ) : null}
     </div>
   );
 }

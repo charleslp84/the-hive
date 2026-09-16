@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -1781,6 +1782,44 @@ describe('TerminalSurface input-box report', () => {
       const [link] = (await links(1)) ?? [];
       expect(link?.text).toBe('src/a.ts');
       expect(link?.range).toEqual({ start: { x: 4, y: 1 }, end: { x: 11, y: 1 } });
+    });
+
+    /**
+     * The tooltip is the one part of a link the WebGL renderer leaves to the
+     * DOM, so it is the one part a unit test can see.
+     */
+    it('shows the tooltip with the platform chord on hover, and hides it on leave', async () => {
+      const { container } = render(
+        <TerminalSurface
+          transport={fakeTransport().transport}
+          palette={TERM}
+          resolveFileLinks={async (paths) =>
+            paths.map(() => ({ relPath: 'a.ts', rootKey: '' }))
+          }
+          onOpenFile={vi.fn()}
+        />,
+      );
+      terminal().bufferLines = ['a.ts'];
+
+      const [link] = (await links(1)) ?? [];
+      act(() => {
+        link?.hover?.(
+          new MouseEvent('mousemove', { clientX: 40, clientY: 30 }),
+          'a.ts',
+        );
+      });
+
+      const tip = container.querySelector('[data-testid="terminal-link-tip"]');
+      expect(tip?.textContent).toBe(
+        isMacPlatform() ? 'Open in editor (⌘ + click)' : 'Open in editor (Ctrl + click)',
+      );
+
+      act(() => {
+        link?.leave?.(new MouseEvent('mousemove'), 'a.ts');
+      });
+      expect(
+        container.querySelector('[data-testid="terminal-link-tip"]'),
+      ).toBeNull();
     });
 
     /**
