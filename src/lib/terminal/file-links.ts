@@ -144,14 +144,41 @@ export interface FileLink {
   leave?(event: MouseEvent, text: string): void;
 }
 
+/**
+ * A row as xterm holds it: the text, and where each character is **drawn**.
+ *
+ * The two are not the same, which is the whole reason this type exists.
+ * `translateToString` returns a double-width character — CJK, most emoji, some
+ * box-drawing glyphs — as *one* JS character, while xterm draws it in *two*
+ * columns. So after the first one on a line, every string index undercounts
+ * the real column, and a range built from string offsets drifts left of the
+ * path it is meant to underline: a link the user can see and cannot click,
+ * with nothing on screen to explain why. Claude Code's own output is full of
+ * such characters, so this is the ordinary case rather than an exotic one.
+ *
+ * The widths come from xterm's own cells rather than from a table in this
+ * module. A second definition of "how wide is this character" is a second
+ * thing that can disagree with what was actually painted — and the painter is
+ * the one that gets to be right.
+ */
+export interface TerminalLine {
+  text: string;
+  /**
+   * `columns[i]` is the 0-based column that `text[i]` is drawn at, with one
+   * extra entry at `text.length` for the column just past the last character.
+   * For an all-narrow line this is simply `[0, 1, 2, …]`.
+   */
+  columns: number[];
+}
+
 /** The shape of xterm's `ILinkProvider`. */
 export interface FileLinkProvider {
   provideLinks(y: number, callback: (links: FileLink[] | undefined) => void): void;
 }
 
 export interface FileLinkProviderOptions {
-  /** Row `y` (1-based, as xterm passes it) as text, or `undefined` past the end. */
-  readLine: (y: number) => string | undefined;
+  /** Row `y` (1-based, as xterm passes it), or `undefined` past the end. */
+  readLine: (y: number) => TerminalLine | undefined;
   /** Bare paths in, index-aligned verdicts out. A rejection reads as all-`null`. */
   resolve: (paths: string[]) => Promise<Array<ResolvedLink | null>>;
   open: (target: FileLinkTarget) => void;
@@ -185,6 +212,25 @@ export const MEMO_LINES = 256;
  * without the modifier and xterm's own selection runs, exactly as VS Code
  * behaves.
  */
+/**
+ * The 1-based column that the character at `index` *ends* on, inclusive —
+ * which is the far edge of its cell, two columns along when that cell is wide.
+ *
+ * Found by scanning for the next character drawn further right rather than by
+ * reading `columns[index + 1]`, because a single cell can hold more than one
+ * JS character: a combining accent, or an emoji built from several code units.
+ * Those share a column, and `columns[index + 1]` would then report the cell's
+ * own start and place the range's end before its start.
+ */
+function endColumn(columns: number[], index: number): number {
+  const at = columns[index] ?? index;
+  for (let i = index + 1; i < columns.length; i += 1) {
+    const next = columns[i] ?? at;
+    if (next > at) return next;
+  }
+  return Math.max(columns[columns.length - 1] ?? at + 1, at + 1);
+}
+
 export function createFileLinkProvider(
   options: FileLinkProviderOptions,
 ): FileLinkProvider {
@@ -219,7 +265,7 @@ export function createFileLinkProvider(
   return {
     provideLinks(y, callback) {
       const line = options.readLine(y);
-      const candidates = line === undefined ? [] : findCandidates(line);
+      const candidates = line === undefined ? [] : findCandidates(line.text);
       if (line === undefined || candidates.length === 0) {
         callback(undefined);
         return;
@@ -228,7 +274,7 @@ export function createFileLinkProvider(
       const positions = candidates.map((candidate) => splitPosition(candidate.text));
 
       void verdictsFor(
-        line,
+        line.text,
         positions.map((position) => position.path),
       ).then((verdicts) => {
         const links = candidates.flatMap((candidate, index): FileLink[] => {
@@ -244,9 +290,17 @@ export function createFileLinkProvider(
 
           return [
             {
-              // xterm counts from 1 and includes `end`; `candidate` is 0-based
-              // and excludes it, so only `start` shifts.
-              range: { start: { x: candidate.start + 1, y }, end: { x: candidate.end, y } },
+              /*
+                Columns, not string offsets. xterm counts from 1 and includes
+                `end`; `candidate` is 0-based over the *string* and excludes it.
+                On an all-narrow line `columns[i] === i` and this reduces to the
+                old `start + 1` / `end` — it is a generalisation, not a change
+                of convention.
+              */
+              range: {
+                start: { x: (line.columns[candidate.start] ?? candidate.start) + 1, y },
+                end: { x: endColumn(line.columns, candidate.end - 1), y },
+              },
               text: candidate.text,
               activate: (event) => {
                 if (options.isModified(event)) options.open(target);

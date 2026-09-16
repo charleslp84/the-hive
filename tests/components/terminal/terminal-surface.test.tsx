@@ -1727,6 +1727,34 @@ describe('TerminalSurface input-box report', () => {
     });
 
     /**
+     * The seam the wide-character fix actually lives at.
+     *
+     * `provideLinks` reads the row through the surface's own cell walk, so
+     * this is the assertion that the columns handed to xterm come from
+     * xterm's widths rather than from JS string offsets. `名` is drawn in two
+     * columns, so the path starts at column 3 while its string index is 2 —
+     * off by one, and off by one more for every wide character before it.
+     */
+    it('measures the link range in columns, not string offsets', async () => {
+      render(
+        <TerminalSurface
+          transport={fakeTransport().transport}
+          palette={TERM}
+          resolveFileLinks={async (paths) =>
+            paths.map(() => ({ relPath: 'src/a.ts', rootKey: '' }))
+          }
+          onOpenFile={vi.fn()}
+        />,
+      );
+      terminal().bufferLines = ['名 src/a.ts'];
+      terminal().bufferWide = ['w'];
+
+      const [link] = (await links(1)) ?? [];
+      expect(link?.text).toBe('src/a.ts');
+      expect(link?.range).toEqual({ start: { x: 4, y: 1 }, end: { x: 11, y: 1 } });
+    });
+
+    /**
      * The provider is installed once per terminal and the surface is kept
      * alive across every tab switch, so a resolver captured at construction
      * would outlive the session it named — and answer for the wrong project.

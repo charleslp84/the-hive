@@ -10,6 +10,7 @@ import { shouldAutoScroll } from '@lib/terminal/auto-scroll';
 import {
   createFileLinkProvider,
   type FileLinkTarget,
+  type TerminalLine,
 } from '@lib/terminal/file-links';
 import {
   FRAME_SCAN,
@@ -29,6 +30,56 @@ import type { PromptInput, TerminalTransport } from '@lib/terminal/terminal-tran
 import type { ResolvedLink } from '@shared/fs-contract';
 
 import '@xterm/xterm/css/xterm.css';
+
+/**
+ * A buffer row as both text and columns (HIVE terminal file links).
+ *
+ * `translateToString` alone will not do. It returns a double-width character —
+ * CJK, most emoji, some box-drawing glyphs — as *one* JS character, while
+ * xterm draws it in *two* columns, so every string index after the first one
+ * on a line undercounts the real column. A link range built from those offsets
+ * drifts left of the path it underlines, and the user gets a link they can see
+ * and cannot click.
+ *
+ * So the row is walked cell by cell and the widths are taken from xterm
+ * itself. A width table in this app would be a second opinion about what was
+ * already painted, and the painter is the one that gets to be right.
+ *
+ * A cell reporting width 0 is the spacer half of the wide character before it:
+ * it holds no characters of its own and only advances the column, which the
+ * loop does by reading each cell's own width rather than by counting cells.
+ */
+function readTerminalLine(line: IBufferLine | undefined): TerminalLine | undefined {
+  if (!line) return undefined;
+
+  let text = '';
+  const columns: number[] = [];
+  let column = 0;
+
+  for (let cell = 0; cell < line.length; cell += 1) {
+    const at = line.getCell(cell);
+    if (!at) break;
+
+    const width = at.getWidth();
+    if (width === 0) continue;
+
+    // One cell can carry several JS characters — a combining accent, or an
+    // emoji built from several code units — and they all sit in this column.
+    const chars = at.getChars() || ' ';
+    for (const char of chars) {
+      text += char;
+      columns.push(column);
+    }
+    column += width;
+  }
+
+  columns.push(column);
+
+  // `translateToString(true)` trims the right; trailing blanks cannot hold a
+  // candidate, and dropping them keeps the memo keyed on what was printed.
+  const trimmed = text.replace(/\s+$/u, '');
+  return { text: trimmed, columns: columns.slice(0, trimmed.length + 1) };
+}
 
 /** xterm's line-height is a multiple of the font size, not a CSS length. */
 const LINE_HEIGHT = 1.4;
@@ -476,7 +527,7 @@ export function TerminalSurface({
     */
     const fileLinks = terminal.registerLinkProvider(
       createFileLinkProvider({
-        readLine: (y) => terminal.buffer.active.getLine(y - 1)?.translateToString(true),
+        readLine: (y) => readTerminalLine(terminal.buffer.active.getLine(y - 1)),
         resolve: (paths) =>
           fileLinksRef.current.resolveFileLinks?.(paths) ??
           Promise.resolve(paths.map(() => null)),
