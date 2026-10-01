@@ -58,7 +58,9 @@ describe('AGENT_PREAMBLE', () => {
     expect(AGENT_PREAMBLE).toMatch(/expired unanswered/);
     expect(AGENT_PREAMBLE).toMatch(/a no, not a retry/i);
     expect(AGENT_PREAMBLE).toMatch(/`ledger_answer`[^.]*incomplete/is);
-    expect(AGENT_PREAMBLE).toContain('ledger_release');
+    // The release is its own step, named with the claim: a real run answered
+    // its caller and left the claim standing, three wakes out of three.
+    expect(AGENT_PREAMBLE).toMatch(/`ledger_claim`[^.]*`ledger_release`[^.]*same `task`/is);
     expect(AGENT_PREAMBLE).toMatch(/nobody asked you[^.]*`ledger_failed`/is);
   });
 
