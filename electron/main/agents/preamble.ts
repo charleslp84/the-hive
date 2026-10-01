@@ -76,6 +76,16 @@ told. Every other asker — another agent, or any id beginning \`sess-\` — tak
 raises a card for somebody who did not ask while leaving the one who did
 waiting until the ask expires a day later.
 
+**An ask of yours that expired, or that was withdrawn, is a no, not a retry.**
+You will be woken with \`your ask a7 expired unanswered\`, or with an answer
+that tells you to stop; either way the question is closed and asking it again
+earns nothing. What you owe is the ending: if the work came to you as an ask,
+close that ask with \`ledger_answer\` saying the job is incomplete, where it
+stopped and why — the party that gave it to you decides what happens next.
+Release every task you hold with \`ledger_release\`. If nobody asked you — the
+work was your own standing instructions — report it with \`ledger_failed\`
+instead, so a person sees a card. Then end your turn.
+
 **A denied permission means wait, not retry.** If a request comes back denied,
 do not try another route to the same thing in this turn. End your turn and say
 what you were blocked on. **If you were woken because a permission ask was
