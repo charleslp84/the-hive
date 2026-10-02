@@ -25,10 +25,10 @@
 name: Download count
 
 on:
-  schedule:
+  #schedule:
     # Daily. Nothing waits on this, so the hour is arbitrary — but not `:00`,
     # where every cron on GitHub queues up at once.
-    - cron: '17 6 * * *'
+   # - cron: '17 6 * * *'
   # For a number worth having before tomorrow.
   workflow_dispatch:
 
