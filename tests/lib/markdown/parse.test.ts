@@ -144,4 +144,58 @@ describe('parseMarkdown', () => {
       { kind: 'paragraph', line: 2, children: [{ kind: 'text', text: 'x' }] },
     ]);
   });
+
+  /*
+    Each container pairs its own tags: a </details> inside a list item cannot
+    close a disclosure opened at the top level, so `after` stays inside it.
+  */
+  it('pairs <details> only within one container', async () => {
+    const { blocks } = await parseMarkdown('<details>\n\n- x\n\n  </details>\n\nafter\n');
+    expect(blocks).toHaveLength(1);
+    const [details] = blocks;
+    expect(details).toMatchObject({
+      kind: 'details',
+      blocks: [
+        {
+          kind: 'list',
+          items: [
+            {
+              blocks: [
+                { kind: 'paragraph', children: [{ kind: 'text', text: 'x' }] },
+                { kind: 'raw', text: '</details>' },
+              ],
+            },
+          ],
+        },
+        { kind: 'paragraph', children: [{ kind: 'text', text: 'after' }] },
+      ],
+    });
+  });
+
+  it('shows a stray </details> as its source', async () => {
+    expect((await parseMarkdown('</details>\n')).blocks).toEqual([
+      { kind: 'raw', line: 0, text: '</details>' },
+    ]);
+  });
+
+  it('keeps tags inside a summary as text, and unescapes its entities', async () => {
+    const [details] = (
+      await parseMarkdown('<details><summary><b>Q &amp; A</b></summary>\n\nbody\n</details>\n')
+    ).blocks;
+    expect(details).toMatchObject({
+      kind: 'details',
+      summary: [
+        { kind: 'text', text: '<b>' },
+        { kind: 'text', text: 'Q & A' },
+        { kind: 'text', text: '</b>' },
+      ],
+    });
+  });
+
+  it('opens only on an `open` attribute, not on one that merely contains the word', async () => {
+    const [closed] = (await parseMarkdown('<details data-open title="open me">\n<summary>S</summary>\n\nx\n</details>\n')).blocks;
+    expect(closed).toMatchObject({ kind: 'details', open: false });
+    const [open] = (await parseMarkdown('<details open="">\n<summary>S</summary>\n\nx\n</details>\n')).blocks;
+    expect(open).toMatchObject({ kind: 'details', open: true });
+  });
 });

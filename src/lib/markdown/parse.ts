@@ -1,6 +1,6 @@
 import type { Lexer, Token, Tokens } from 'marked';
 
-import { scanHtml } from '@lib/markdown/html';
+import { hasAttribute, scanHtml } from '@lib/markdown/html';
 import { convertInlines, plainText, unescapeHtml } from '@lib/markdown/inline';
 import type { MdBlock, MdDocument, MdInline } from '@lib/markdown/model';
 import { createSlugger } from '@lib/markdown/slug';
@@ -126,7 +126,7 @@ function blockHtml(
       flush();
       stack.push({
         line,
-        open: /\bopen\b/i.test(piece.attrs),
+        open: hasAttribute(piece.attrs, 'open'),
         summary: [],
         blocks: [],
         inSummary: false,
@@ -142,7 +142,10 @@ function blockHtml(
       frame.inSummary = false;
     } else {
       const text = piece.kind === 'text' ? piece.text : piece.raw;
-      if (frame?.inSummary) frame.summary.push({ kind: 'text', text });
+      // Summary text is HTML source, so `&amp;` means `&`; tags in it stay literal.
+      if (frame?.inSummary) {
+        frame.summary.push({ kind: 'text', text: piece.kind === 'text' ? unescapeHtml(text) : text });
+      }
       else literal += text;
     }
   }

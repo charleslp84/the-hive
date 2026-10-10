@@ -65,3 +65,11 @@ export function imgAttributes(attrs: string): { src: string; alt: string } {
   }
   return { src: found.src ?? '', alt: found.alt ?? '' };
 }
+
+/** Whether a tag carries attribute `name` itself — not `data-name`, not inside a value. */
+export function hasAttribute(attrs: string, name: string): boolean {
+  for (const [, attribute = ''] of attrs.matchAll(ATTRIBUTE)) {
+    if (attribute.toLowerCase() === name) return true;
+  }
+  return false;
+}
