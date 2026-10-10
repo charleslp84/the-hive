@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useSwarmPhrase } from '@/hooks/use-swarm-phrase';
 
@@ -47,6 +47,7 @@ export function EditorPane() {
   const { edit, save, reload, closeFile, consumeCursor } = useEditorActions();
   const emptyPhrase = useSwarmPhrase('empty.editor');
   const markdown = useMarkdownView();
+  const paneRef = useRef<HTMLDivElement>(null);
   const readingPhrase = useSwarmPhrase('loading.file');
   /** Escape belongs to whichever overlay is up, not to this pane. */
   const settingsOpen = useSettingsOpen();
@@ -137,6 +138,40 @@ export function EditorPane() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [nav, key, overlayOpen, closeFile]);
 
+  const markdownView = markdown?.view ?? null;
+  const setMarkdownView = markdown?.setView;
+
+  /**
+   * ⇧⌘V flips Source and Preview, as in VS Code (Split goes to Source).
+   *
+   * Only from inside this pane, or with nothing focused. The terminal, the
+   * message row and the console keep the chord for themselves, and an open
+   * overlay owns the keyboard. ⇧⌘V is bound by no menu item here (no
+   * `pasteAndMatchStyle` role in `menu.ts`); `preventDefault` stops Chromium
+   * pasting into the source while the view changes under it.
+   */
+  useEffect(() => {
+    if (markdownView === null || !setMarkdownView) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const chord =
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === 'v';
+      if (!chord || overlayOpen) return;
+
+      const target = event.target;
+      const inPane = target instanceof Node && (paneRef.current?.contains(target) ?? false);
+      if (!inPane && target !== document.body) return;
+
+      event.preventDefault();
+      setMarkdownView(markdownView === 'source' ? 'preview' : 'source');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [markdownView, setMarkdownView, overlayOpen]);
+
   /**
    * The pane is mounted but has no file to show.
    *
@@ -191,7 +226,7 @@ export function EditorPane() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-panel-2">
+    <div ref={paneRef} className="flex min-h-0 flex-1 flex-col bg-panel-2">
       {/*
         Single-file mode has no tab strip, so the filename and the way out live
         here instead. In `tabs` mode both are in the strip and this row would be

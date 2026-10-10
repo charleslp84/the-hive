@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -400,6 +400,14 @@ describe('EditorPane — single-file mode', () => {
 });
 
 describe('EditorPane — markdown', () => {
+  // The overlay tests above leave Settings and the picker open; ⇧⌘V rightly
+  // yields to an open overlay, so start each case with none.
+  beforeEach(() => {
+    act(() => {
+      useUiStore.getState().reset();
+    });
+  });
+
   const openReadme = async (text = '# Hello\n\n[guide](docs/guide.md)\n') => {
     readFile.mockResolvedValue(content(text));
     await openFile('README.md');
@@ -433,6 +441,34 @@ describe('EditorPane — markdown', () => {
     render(<EditorPane />);
     await userEvent.click(await screen.findByRole('button', { name: 'guide' }));
     expect(await screen.findByText('Not found in this project: docs/guide.md')).toBeInTheDocument();
+  });
+
+  it('toggles source and preview on ⇧⌘V', async () => {
+    await openReadme();
+    const { container } = render(<EditorPane />);
+    await screen.findByRole('heading', { name: 'Hello' });
+
+    // The listener is on window, outside React's event system: wait for the render.
+    await userEvent.keyboard('{Meta>}{Shift>}V{/Shift}{/Meta}');
+    await waitFor(() => expect(container.querySelector('[data-markdown-preview]')).toBeNull());
+
+    await userEvent.keyboard('{Meta>}{Shift>}V{/Shift}{/Meta}');
+    expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument();
+  });
+
+  it('leaves ⇧⌘V alone in a field outside the pane', async () => {
+    await openReadme();
+    render(
+      <>
+        <textarea aria-label="message" />
+        <EditorPane />
+      </>,
+    );
+    await screen.findByRole('heading', { name: 'Hello' });
+
+    await userEvent.click(screen.getByRole('textbox', { name: 'message' }));
+    await userEvent.keyboard('{Meta>}{Shift>}V{/Shift}{/Meta}');
+    expect(screen.getByRole('heading', { name: 'Hello' })).toBeInTheDocument();
   });
 });
 
