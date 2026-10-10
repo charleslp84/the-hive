@@ -1,7 +1,8 @@
 import type { Lexer, Token, Tokens } from 'marked';
 
-import { convertInlines, unescapeHtml } from '@lib/markdown/inline';
+import { convertInlines, plainText, unescapeHtml } from '@lib/markdown/inline';
 import type { MdBlock, MdDocument } from '@lib/markdown/model';
+import { createSlugger } from '@lib/markdown/slug';
 
 /**
  * Markdown text → {@link MdDocument}.
@@ -18,7 +19,18 @@ export async function parseMarkdown(text: string): Promise<MdDocument> {
   // marked normalises line endings itself; doing it first keeps `raw` findable.
   const source = text.replace(/\r\n?/g, '\n');
   const tokens = Lexer.lex(source, { gfm: true });
-  return { blocks: convertBlocks(tokens, lineLocator(source)) };
+  const blocks = convertBlocks(tokens, lineLocator(source));
+  assignIds(blocks, createSlugger());
+  return { blocks };
+}
+
+/** Fills each heading's anchor, in document order, through containers. */
+function assignIds(blocks: MdBlock[], slug: (text: string) => string): void {
+  for (const block of blocks) {
+    if (block.kind === 'heading') block.id = slug(plainText(block.children));
+    else if (block.kind === 'quote' || block.kind === 'details') assignIds(block.blocks, slug);
+    else if (block.kind === 'list') for (const item of block.items) assignIds(item.blocks, slug);
+  }
 }
 
 /**

@@ -87,4 +87,14 @@ describe('parseMarkdown', () => {
       ],
     });
   });
+
+  it('gives every heading a unique anchor, nested ones included', async () => {
+    const { blocks } = await parseMarkdown('# Intro\n\n> ## Intro\n\n- ## Intro\n');
+    const ids = [
+      blocks[0],
+      blocks[1]?.kind === 'quote' ? blocks[1].blocks[0] : null,
+      blocks[2]?.kind === 'list' ? blocks[2].items[0]?.blocks[0] : null,
+    ].map((block) => (block?.kind === 'heading' ? block.id : null));
+    expect(ids).toEqual(['intro', 'intro-1', 'intro-2']);
+  });
 });
