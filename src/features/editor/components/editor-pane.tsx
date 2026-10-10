@@ -9,6 +9,7 @@ import {
   EditorNotice,
   NoticeAction,
 } from '@features/editor/components/editor-notice';
+import { ViewToggle } from '@features/editor/components/view-toggle';
 import { languageFor } from '@lib/explorer/language';
 import { humanSize } from '@lib/human-size';
 import { useEditorAppearance, useEditorLayout } from '@stores/appearance-store';
@@ -172,6 +173,7 @@ export function EditorPane() {
           <span className="flex-1 truncate tabular-nums text-ui-sm text-muted">
             {file.relPath}
           </span>
+          <ViewToggle />
           {file.dirty ? (
             <span className="size-1.5 shrink-0 rounded-full bg-amber">
               <span className="sr-only">unsaved changes</span>
