@@ -35,4 +35,56 @@ describe('parseMarkdown', () => {
     const { blocks } = await parseMarkdown('# A\r\n\r\nb\r\n');
     expect(blocks.map((block) => block.line)).toEqual([0, 2]);
   });
+
+  it('maps lists, task items and ordered starts', async () => {
+    const [bullets] = (await parseMarkdown('- a\n- b\n')).blocks;
+    expect(bullets).toMatchObject({
+      kind: 'list',
+      ordered: false,
+      start: 1,
+      items: [{ task: false }, { task: false }],
+    });
+
+    const [ordered] = (await parseMarkdown('3. a\n4. b\n')).blocks;
+    expect(ordered).toMatchObject({ kind: 'list', ordered: true, start: 3 });
+
+    const [tasks] = (await parseMarkdown('- [x] done\n- [ ] todo\n')).blocks;
+    expect(tasks).toMatchObject({
+      kind: 'list',
+      items: [
+        {
+          task: true,
+          checked: true,
+          blocks: [{ kind: 'paragraph', children: [{ kind: 'text', text: 'done' }] }],
+        },
+        { task: true, checked: false },
+      ],
+    });
+  });
+
+  it('maps a quote with its own blocks', async () => {
+    const [quote] = (await parseMarkdown('> q\n')).blocks;
+    expect(quote).toEqual({
+      kind: 'quote',
+      line: 0,
+      blocks: [{ kind: 'paragraph', line: 0, children: [{ kind: 'text', text: 'q' }] }],
+    });
+  });
+
+  it('maps a table with alignment and inline cells', async () => {
+    const [table] = (await parseMarkdown('| a | b | c |\n|:-|:-:|-:|\n| `c` | d | e |\n')).blocks;
+    expect(table).toEqual({
+      kind: 'table',
+      line: 0,
+      align: ['left', 'center', 'right'],
+      header: [
+        [{ kind: 'text', text: 'a' }],
+        [{ kind: 'text', text: 'b' }],
+        [{ kind: 'text', text: 'c' }],
+      ],
+      rows: [
+        [[{ kind: 'code', text: 'c' }], [{ kind: 'text', text: 'd' }], [{ kind: 'text', text: 'e' }]],
+      ],
+    });
+  });
 });

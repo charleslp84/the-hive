@@ -101,6 +101,36 @@ function convertBlock(token: Token, line: number): MdBlock | null {
         text: code.text,
       };
     }
+    case 'blockquote':
+      return {
+        kind: 'quote',
+        line,
+        blocks: convertBlocks((token as Tokens.Blockquote).tokens, () => line),
+      };
+    case 'list': {
+      const list = token as Tokens.List;
+      return {
+        kind: 'list',
+        line,
+        ordered: list.ordered,
+        start: typeof list.start === 'number' ? list.start : 1,
+        items: list.items.map((item) => ({
+          task: item.task,
+          checked: item.checked ?? false,
+          blocks: convertBlocks(item.tokens, () => line),
+        })),
+      };
+    }
+    case 'table': {
+      const table = token as Tokens.Table;
+      return {
+        kind: 'table',
+        line,
+        align: table.align,
+        header: table.header.map((cell) => convertInlines(cell.tokens)),
+        rows: table.rows.map((row) => row.map((cell) => convertInlines(cell.tokens))),
+      };
+    }
     case 'hr':
       return { kind: 'hr', line };
     default:
