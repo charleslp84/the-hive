@@ -9,7 +9,9 @@ import {
   EditorNotice,
   NoticeAction,
 } from '@features/editor/components/editor-notice';
+import { MarkdownStage, type SourceSync } from '@features/editor/components/markdown-stage';
 import { ViewToggle } from '@features/editor/components/view-toggle';
+import { useMarkdownView } from '@features/editor/hooks/use-markdown-view';
 import { languageFor } from '@lib/explorer/language';
 import { humanSize } from '@lib/human-size';
 import { useEditorAppearance, useEditorLayout } from '@stores/appearance-store';
@@ -44,6 +46,7 @@ export function EditorPane() {
   const { nav } = useEditorLayout();
   const { edit, save, reload, closeFile, consumeCursor } = useEditorActions();
   const emptyPhrase = useSwarmPhrase('empty.editor');
+  const markdown = useMarkdownView();
   const readingPhrase = useSwarmPhrase('loading.file');
   /** Escape belongs to whichever overlay is up, not to this pane. */
   const settingsOpen = useSettingsOpen();
@@ -161,6 +164,32 @@ export function EditorPane() {
     );
   }
 
+  /** The text to show, or `null` while loading or refused. */
+  const text = file.refusal === null ? file.text : null;
+
+  /**
+   * The one editor surface, whichever view is on. Split passes the sync props;
+   * every other caller passes `null`, and the spread adds nothing.
+   */
+  const renderSource = (value: string, sync: SourceSync | null) => (
+    <EditorSurface
+      fileKey={file.key}
+      value={value}
+      languageLoad={languageLoad}
+      readOnly={!appearance.editable}
+      fontFamily={appearance.fontFamily}
+      fontSize={appearance.fontSize}
+      wordWrap={appearance.wordWrap}
+      lineNumbers={appearance.lineNumbers}
+      tabWidth={appearance.tabWidth}
+      onChange={onChange}
+      onSave={onSave}
+      cursor={file.pendingCursor}
+      onCursorApplied={onCursorApplied}
+      {...(sync ?? {})}
+    />
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-panel-2">
       {/*
@@ -261,23 +290,16 @@ export function EditorPane() {
         <PaneMessage icon="ph-file">{readingPhrase}</PaneMessage>
       ) : null}
 
-      {file.refusal === null && file.text !== null ? (
-        <EditorSurface
-          fileKey={file.key}
-          value={file.text}
-          languageLoad={languageLoad}
-          readOnly={!appearance.editable}
-          fontFamily={appearance.fontFamily}
-          fontSize={appearance.fontSize}
-          wordWrap={appearance.wordWrap}
-          lineNumbers={appearance.lineNumbers}
-          tabWidth={appearance.tabWidth}
-          onChange={onChange}
-          onSave={onSave}
-          cursor={file.pendingCursor}
-          onCursorApplied={onCursorApplied}
+      {text === null ? null : markdown && markdown.view !== 'source' ? (
+        <MarkdownStage
+          key={file.key}
+          file={{ ...file, text }}
+          view={markdown.view}
+          renderSource={(sync) => renderSource(text, sync)}
         />
-      ) : null}
+      ) : (
+        renderSource(text, null)
+      )}
     </div>
   );
 }

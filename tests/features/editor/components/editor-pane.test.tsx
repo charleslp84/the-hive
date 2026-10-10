@@ -17,7 +17,8 @@ import { useUiStore } from '@stores/ui-store';
  * the two settings independent.
  */
 
-const { readFile, writeFile } = vi.hoisted(() => ({
+const { readFile, writeFile, resolvePaths } = vi.hoisted(() => ({
+  resolvePaths: vi.fn(),
   readFile: vi.fn(),
   writeFile: vi.fn(),
 }));
@@ -26,6 +27,7 @@ vi.mock('@lib/explorer/fs-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@lib/explorer/fs-client')>()),
   readFile,
   writeFile,
+  resolvePaths,
 }));
 
 const store = () => useEditorStore.getState();
@@ -49,6 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   readFile.mockResolvedValue(content('export {};\n'));
   writeFile.mockResolvedValue({ ok: true, mtimeMs: 200 });
+  resolvePaths.mockResolvedValue([null]);
   useEditorStore.getState().reset();
   useAppearanceStore.getState().reset();
 });
@@ -395,3 +398,41 @@ describe('EditorPane — single-file mode', () => {
   });
 
 });
+
+describe('EditorPane — markdown', () => {
+  const openReadme = async (text = '# Hello\n\n[guide](docs/guide.md)\n') => {
+    readFile.mockResolvedValue(content(text));
+    await openFile('README.md');
+  };
+
+  it('opens a markdown file rendered, with no editor', async () => {
+    await openReadme();
+    const { container } = render(<EditorPane />);
+    expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument();
+    expect(container.querySelector('.cm-content')).toBeNull();
+  });
+
+  it('shows source and preview side by side in split', async () => {
+    await openReadme();
+    act(() => store().setView(fileKey('demo', 'README.md'), 'split'));
+    const { container } = render(<EditorPane />);
+    expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument();
+    expect(docText(container)).toContain('# Hello');
+  });
+
+  it('shows only the editor in source', async () => {
+    await openReadme();
+    act(() => store().setView(fileKey('demo', 'README.md'), 'source'));
+    const { container } = render(<EditorPane />);
+    expect(docText(container)).toContain('# Hello');
+    expect(container.querySelector('[data-markdown-preview]')).toBeNull();
+  });
+
+  it('names a link main would not serve', async () => {
+    await openReadme();
+    render(<EditorPane />);
+    await userEvent.click(await screen.findByRole('button', { name: 'guide' }));
+    expect(await screen.findByText('Not found in this project: docs/guide.md')).toBeInTheDocument();
+  });
+});
+
