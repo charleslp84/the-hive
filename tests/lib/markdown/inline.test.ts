@@ -63,3 +63,61 @@ describe('plainText', () => {
     expect(plainText(inlinesOf('Héllo **&** `code` ![pic](p.png)'))).toBe('Héllo & code pic');
   });
 });
+
+describe('convertInlines — raw HTML', () => {
+  it('renders kbd, sub and sup as themselves', () => {
+    expect(inlinesOf('x <kbd>K</kbd> y')).toEqual([
+      { kind: 'text', text: 'x ' },
+      { kind: 'tag', tag: 'kbd', children: [{ kind: 'text', text: 'K' }] },
+      { kind: 'text', text: ' y' },
+    ]);
+    expect(inlinesOf('H<sub>2</sub>O')[1]).toEqual({
+      kind: 'tag',
+      tag: 'sub',
+      children: [{ kind: 'text', text: '2' }],
+    });
+  });
+
+  it('maps <br> in either spelling', () => {
+    expect(inlinesOf('a<br>b')[1]).toEqual({ kind: 'br' });
+    expect(inlinesOf('a<br/>b')[1]).toEqual({ kind: 'br' });
+  });
+
+  it('turns <img> into a placeholder, dropping every other attribute', () => {
+    expect(inlinesOf('x <img src="a.png" alt="A" onerror="boom()"> y')[1]).toEqual({
+      kind: 'image',
+      src: 'a.png',
+      alt: 'A',
+    });
+  });
+
+  it('shows any other tag as its own text', () => {
+    expect(inlinesOf('x <script>alert(1)</script> y')).toEqual([
+      { kind: 'text', text: 'x ' },
+      { kind: 'text', text: '<script>' },
+      { kind: 'text', text: 'alert(1)' },
+      { kind: 'text', text: '</script>' },
+      { kind: 'text', text: ' y' },
+    ]);
+    expect(inlinesOf('x <a href="javascript:alert(1)">t</a>')[1]).toEqual({
+      kind: 'text',
+      text: '<a href="javascript:alert(1)">',
+    });
+  });
+
+  it('drops comments', () => {
+    expect(inlinesOf('x <!-- c --> y')).toEqual([
+      { kind: 'text', text: 'x ' },
+      { kind: 'text', text: ' y' },
+    ]);
+  });
+
+  it('closes an unclosed tag at the end, and shows an unmatched close as text', () => {
+    expect(inlinesOf('x <kbd>K y')[1]).toEqual({
+      kind: 'tag',
+      tag: 'kbd',
+      children: [{ kind: 'text', text: 'K y' }],
+    });
+    expect(inlinesOf('x </kbd> y')[1]).toEqual({ kind: 'text', text: '</kbd>' });
+  });
+});
