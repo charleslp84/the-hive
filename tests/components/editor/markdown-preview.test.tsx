@@ -111,6 +111,13 @@ describe('MarkdownPreview', () => {
     expect(scrolled).toEqual([screen.getByRole('heading', { name: 'The End' })]);
   });
 
+  it('survives a document nested thousands of tags deep', async () => {
+    const { container } = await show(`x ${'<kbd>'.repeat(5000)}y\n`);
+    // Thirty-two real elements; the rest of the tags shown as their own text.
+    expect(container.querySelectorAll('kbd')).toHaveLength(32);
+    expect(container.textContent).toMatch(/<kbd>y$/);
+  });
+
   it('renders nothing but its frame before the first parse', () => {
     const { container } = render(
       <MarkdownPreview doc={null} fontSize={13} onOpenLink={vi.fn()} />,

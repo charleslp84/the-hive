@@ -43,6 +43,15 @@ export function scanHtml(html: string): HtmlPiece[] {
   return pieces;
 }
 
+/**
+ * How deep raw-HTML tags may nest in the model — `<kbd>` inside `<kbd>`,
+ * `<details>` inside `<details>`. The preview renders the model recursively,
+ * and 5000 nested `<kbd>` in a README overflowed React's stack; with no error
+ * boundary that blanks the whole app. Past the cap an opening tag is kept as
+ * its own literal text. Thirty-two is far past anything a document means.
+ */
+export const MAX_HTML_NESTING = 32;
+
 export const isInlineTag = (tag: string): tag is InlineTag =>
   tag === 'kbd' || tag === 'sub' || tag === 'sup';
 

@@ -1,7 +1,9 @@
 import { Lexer, type Tokens } from 'marked';
 import { describe, expect, it } from 'vitest';
 
+import { MAX_HTML_NESTING } from '@lib/markdown/html';
 import { convertInlines, plainText } from '@lib/markdown/inline';
+import type { MdInline } from '@lib/markdown/model';
 
 /** The inline nodes of a one-paragraph document. */
 const inlinesOf = (source: string) =>
@@ -155,5 +157,17 @@ describe('convertInlines — raw HTML', () => {
       kind: 'text',
       text: '<iframe src="https://evil.example">',
     });
+  });
+
+  /*
+    The preview renders the model recursively; 5000 nested <kbd> overflowed
+    React's stack and, with no error boundary, would blank the app. Past the
+    cap an opening tag is shown as its own text instead.
+  */
+  it('caps tag nesting, keeping the rest as text', () => {
+    const depthOf = (nodes: MdInline[]): number =>
+      Math.max(0, ...nodes.map((node) => (node.kind === 'tag' ? 1 + depthOf(node.children) : 0)));
+    const nodes = inlinesOf(`x ${'<kbd>'.repeat(5000)}y`);
+    expect(depthOf(nodes)).toBe(MAX_HTML_NESTING);
   });
 });

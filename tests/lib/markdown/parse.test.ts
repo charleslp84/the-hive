@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { MAX_HTML_NESTING } from '@lib/markdown/html';
+import type { MdBlock } from '@lib/markdown/model';
 import { parseMarkdown } from '@lib/markdown/parse';
 
 describe('parseMarkdown', () => {
@@ -197,5 +199,12 @@ describe('parseMarkdown', () => {
     expect(closed).toMatchObject({ kind: 'details', open: false });
     const [open] = (await parseMarkdown('<details open="">\n<summary>S</summary>\n\nx\n</details>\n')).blocks;
     expect(open).toMatchObject({ kind: 'details', open: true });
+  });
+
+  it('caps <details> nesting, keeping the rest as source text', async () => {
+    const depthOf = (blocks: MdBlock[]): number =>
+      Math.max(0, ...blocks.map((block) => (block.kind === 'details' ? 1 + depthOf(block.blocks) : 0)));
+    const { blocks } = await parseMarkdown(`${'<details>\n\n'.repeat(200)}x\n`);
+    expect(depthOf(blocks)).toBe(MAX_HTML_NESTING);
   });
 });

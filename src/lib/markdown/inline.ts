@@ -1,6 +1,6 @@
 import type { Token, Tokens } from 'marked';
 
-import { imgAttributes, isInlineTag, scanHtml } from '@lib/markdown/html';
+import { MAX_HTML_NESTING, imgAttributes, isInlineTag, scanHtml } from '@lib/markdown/html';
 import type { InlineTag, MdInline } from '@lib/markdown/model';
 
 /**
@@ -45,7 +45,12 @@ export function convertInlines(tokens: Token[] | undefined): MdInline[] {
         if (piece.kind === 'open' && piece.tag === 'br') push({ kind: 'br' });
         else if (piece.kind === 'open' && piece.tag === 'img') {
           push({ kind: 'image', ...imgAttributes(piece.attrs) });
-        } else if (piece.kind === 'open' && isInlineTag(piece.tag) && !piece.selfClosing) {
+        } else if (
+          piece.kind === 'open' &&
+          isInlineTag(piece.tag) &&
+          !piece.selfClosing &&
+          stack.length < MAX_HTML_NESTING
+        ) {
           stack.push({ tag: piece.tag, children: [] });
         } else if (piece.kind === 'close' && stack.at(-1)?.tag === piece.tag) closeTop();
         else push({ kind: 'text', text: piece.kind === 'text' ? piece.text : piece.raw });

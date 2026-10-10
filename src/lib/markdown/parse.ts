@@ -1,6 +1,6 @@
 import type { Lexer, Token, Tokens } from 'marked';
 
-import { hasAttribute, scanHtml } from '@lib/markdown/html';
+import { MAX_HTML_NESTING, hasAttribute, scanHtml } from '@lib/markdown/html';
 import { convertInlines, plainText, unescapeHtml } from '@lib/markdown/inline';
 import type { MdBlock, MdDocument, MdInline } from '@lib/markdown/model';
 import { createSlugger } from '@lib/markdown/slug';
@@ -122,7 +122,7 @@ function blockHtml(
   for (const piece of scanHtml(raw)) {
     const frame = stack.at(-1);
     if (piece.kind === 'comment') continue;
-    if (piece.kind === 'open' && piece.tag === 'details') {
+    if (piece.kind === 'open' && piece.tag === 'details' && stack.length < MAX_HTML_NESTING) {
       flush();
       stack.push({
         line,
