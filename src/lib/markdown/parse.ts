@@ -1,4 +1,4 @@
-import type { Lexer, Token, Tokens } from 'marked';
+import { Lexer, type Token, type Tokens } from 'marked';
 
 import { MAX_HTML_NESTING, hasAttribute, scanHtml } from '@lib/markdown/html';
 import { convertInlines, plainText, unescapeHtml } from '@lib/markdown/inline';
@@ -8,15 +8,14 @@ import { createSlugger } from '@lib/markdown/slug';
 /**
  * Markdown text → {@link MdDocument}.
  *
- * `marked` is imported lazily, like the editor's grammars: a session that never
- * previews a file never loads it. The promise is cached, so only the first
- * preview waits for the chunk.
+ * `marked` is imported statically: the PR conversation's renderer
+ * (`features/shared/components/markdown.tsx`) already puts it in the main
+ * bundle, so a lazy import here saved nothing and only drew a build warning.
+ * The function stays async so the preview's loading and failure paths do not
+ * depend on that, and a parse that throws (marked overflows its own stack on a
+ * few thousand nested quotes) rejects rather than crashing the caller.
  */
-let loading: Promise<{ Lexer: typeof Lexer }> | null = null;
-const loadMarked = () => (loading ??= import('marked'));
-
 export async function parseMarkdown(text: string): Promise<MdDocument> {
-  const { Lexer } = await loadMarked();
   // marked normalises line endings itself; doing it first keeps `raw` findable.
   const source = text.replace(/\r\n?/g, '\n');
   const tokens = Lexer.lex(source, { gfm: true });
