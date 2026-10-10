@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -116,5 +116,54 @@ describe('MarkdownPreview', () => {
       <MarkdownPreview doc={null} fontSize={13} onOpenLink={vi.fn()} />,
     );
     expect(container.querySelector('[data-markdown-preview] article')).toBeEmptyDOMElement();
+  });
+});
+
+describe('MarkdownPreview — scroll sync', () => {
+  /** happy-dom performs no layout, so block geometry is stubbed per element. */
+  const layOut = (container: HTMLElement) => {
+    container.querySelectorAll<HTMLElement>('article > [data-line]').forEach((block, index) => {
+      Object.defineProperty(block, 'offsetTop', { configurable: true, value: index * 100 });
+      Object.defineProperty(block, 'offsetHeight', { configurable: true, value: 100 });
+    });
+    const scroller = container.querySelector<HTMLElement>('[data-markdown-preview]') as HTMLElement;
+    let top = 0;
+    Object.defineProperty(scroller, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => {
+        top = value;
+      },
+    });
+    return scroller;
+  };
+
+  it('scrolls the block at or above the requested line to the top', async () => {
+    const doc = await parseMarkdown('# A\n\npara\n\n## B\n'); // lines 0, 2, 4
+    const { container, rerender } = render(
+      <MarkdownPreview doc={doc} fontSize={13} onOpenLink={vi.fn()} topLine={null} />,
+    );
+    const scroller = layOut(container);
+
+    rerender(<MarkdownPreview doc={doc} fontSize={13} onOpenLink={vi.fn()} topLine={3} />);
+    expect(scroller.scrollTop).toBe(100);
+  });
+
+  it('reports the first block still in view as the user scrolls', async () => {
+    const onTopLineChange = vi.fn();
+    const doc = await parseMarkdown('# A\n\npara\n\n## B\n');
+    const { container } = render(
+      <MarkdownPreview
+        doc={doc}
+        fontSize={13}
+        onOpenLink={vi.fn()}
+        onTopLineChange={onTopLineChange}
+      />,
+    );
+    const scroller = layOut(container);
+
+    scroller.scrollTop = 150;
+    fireEvent.scroll(scroller);
+    expect(onTopLineChange).toHaveBeenCalledWith(2);
   });
 });

@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -291,8 +291,21 @@ function renderBlock(block: MdBlock, ctx: LinkContext, line: number | undefined)
   }
 }
 
-export function MarkdownPreview({ doc, fontSize, onOpenLink }: MarkdownPreviewProps) {
+/** Top-level blocks in document order — the only ones carrying a source line. */
+const topBlocks = (scroller: HTMLElement): HTMLElement[] =>
+  Array.from(scroller.querySelectorAll<HTMLElement>('article > [data-line]'));
+
+export function MarkdownPreview({
+  doc,
+  fontSize,
+  onOpenLink,
+  topLine = null,
+  onTopLineChange,
+}: MarkdownPreviewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Read at scroll time, so a new callback identity never re-binds anything. */
+  const onTopLineChangeRef = useRef(onTopLineChange);
+  onTopLineChangeRef.current = onTopLineChange;
 
   const ctx = useMemo<LinkContext>(
     () => ({
@@ -307,9 +320,32 @@ export function MarkdownPreview({ doc, fontSize, onOpenLink }: MarkdownPreviewPr
     [onOpenLink],
   );
 
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller || topLine === null) return;
+    let target: HTMLElement | null = null;
+    for (const block of topBlocks(scroller)) {
+      if (Number(block.dataset.line) > topLine) break;
+      target = block;
+    }
+    // The scroller is `relative`, so it is each block's offsetParent.
+    if (target) scroller.scrollTop = target.offsetTop;
+  }, [topLine, doc]);
+
+  const onScroll = () => {
+    const scroller = scrollRef.current;
+    const report = onTopLineChangeRef.current;
+    if (!scroller || !report) return;
+    const visible = topBlocks(scroller).find(
+      (block) => block.offsetTop + block.offsetHeight > scroller.scrollTop,
+    );
+    if (visible) report(Number(visible.dataset.line));
+  };
+
   return (
     <div
       ref={scrollRef}
+      onScroll={onScroll}
       data-markdown-preview=""
       className="relative min-h-0 flex-1 overflow-auto bg-panel-2 px-10 pt-7 pb-16"
     >
