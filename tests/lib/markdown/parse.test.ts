@@ -97,4 +97,51 @@ describe('parseMarkdown', () => {
     ].map((block) => (block?.kind === 'heading' ? block.id : null));
     expect(ids).toEqual(['intro', 'intro-1', 'intro-2']);
   });
+
+  /*
+    A blank line inside <details> splits it into three block tokens: the
+    opening HTML, the markdown body, and the closing HTML. The converter pairs
+    them so the body renders as markdown inside the disclosure.
+  */
+  it('pairs <details> across the blocks between its tags', async () => {
+    const { blocks } = await parseMarkdown(
+      '<details>\n<summary>S</summary>\n\nbody\n</details>\n\nafter\n',
+    );
+    expect(blocks).toEqual([
+      {
+        kind: 'details',
+        line: 0,
+        open: false,
+        summary: [{ kind: 'text', text: 'S' }],
+        blocks: [{ kind: 'paragraph', line: 3, children: [{ kind: 'text', text: 'body' }] }],
+      },
+      { kind: 'paragraph', line: 6, children: [{ kind: 'text', text: 'after' }] },
+    ]);
+  });
+
+  it('honours open, and closes an unclosed <details> at the end', async () => {
+    const [details] = (await parseMarkdown('<details open><summary>S</summary>\n\nbody\n')).blocks;
+    expect(details).toMatchObject({
+      kind: 'details',
+      open: true,
+      blocks: [{ kind: 'paragraph' }],
+    });
+  });
+
+  it('shows any other block HTML as its literal source', async () => {
+    expect((await parseMarkdown('<script>alert(1)</script>\n')).blocks).toEqual([
+      { kind: 'raw', line: 0, text: '<script>alert(1)</script>' },
+    ]);
+    expect((await parseMarkdown('<div align="center">\n\nhi\n\n</div>\n')).blocks).toEqual([
+      { kind: 'raw', line: 0, text: '<div align="center">' },
+      { kind: 'paragraph', line: 2, children: [{ kind: 'text', text: 'hi' }] },
+      { kind: 'raw', line: 4, text: '</div>' },
+    ]);
+  });
+
+  it('drops an HTML comment block', async () => {
+    expect((await parseMarkdown('<!-- note -->\n\nx\n')).blocks).toEqual([
+      { kind: 'paragraph', line: 2, children: [{ kind: 'text', text: 'x' }] },
+    ]);
+  });
 });

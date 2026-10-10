@@ -1,7 +1,8 @@
 import type { Lexer, Token, Tokens } from 'marked';
 
+import { scanHtml } from '@lib/markdown/html';
 import { convertInlines, plainText, unescapeHtml } from '@lib/markdown/inline';
-import type { MdBlock, MdDocument } from '@lib/markdown/model';
+import type { MdBlock, MdDocument, MdInline } from '@lib/markdown/model';
 import { createSlugger } from '@lib/markdown/slug';
 
 /**
@@ -63,15 +64,89 @@ function lineLocator(source: string): (raw: string) => number {
   };
 }
 
+interface DetailsFrame {
+  line: number;
+  open: boolean;
+  summary: MdInline[];
+  blocks: MdBlock[];
+  inSummary: boolean;
+}
+
+const closeDetails = (frame: DetailsFrame): MdBlock => ({
+  kind: 'details',
+  line: frame.line,
+  open: frame.open,
+  summary: frame.summary,
+  blocks: frame.blocks,
+});
+
 function convertBlocks(tokens: Token[], at: (raw: string) => number): MdBlock[] {
-  const blocks: MdBlock[] = [];
+  const root: MdBlock[] = [];
+  /** Open `<details>`; blocks land in the innermost. */
+  const stack: DetailsFrame[] = [];
+  const push = (block: MdBlock) => (stack.at(-1)?.blocks ?? root).push(block);
+
   for (const token of tokens) {
     // Every token goes through the locator, `space` included, so the cursor moves.
     const line = at(token.raw);
+    if (token.type === 'html') {
+      blockHtml(token.raw, line, stack, push);
+      continue;
+    }
     const block = convertBlock(token, line);
-    if (block) blocks.push(block);
+    if (block) push(block);
   }
-  return blocks;
+
+  // An unclosed <details> still renders what it wrapped.
+  for (let frame = stack.pop(); frame; frame = stack.pop()) push(closeDetails(frame));
+  return root;
+}
+
+/**
+ * One block of raw HTML: `<details>`/`<summary>` structure is consumed, and
+ * everything else accumulates as literal text and becomes one `raw` block.
+ */
+function blockHtml(
+  raw: string,
+  line: number,
+  stack: DetailsFrame[],
+  push: (block: MdBlock) => void,
+): void {
+  let literal = '';
+  const flush = () => {
+    const text = literal.trim();
+    if (text !== '') push({ kind: 'raw', line, text });
+    literal = '';
+  };
+
+  for (const piece of scanHtml(raw)) {
+    const frame = stack.at(-1);
+    if (piece.kind === 'comment') continue;
+    if (piece.kind === 'open' && piece.tag === 'details') {
+      flush();
+      stack.push({
+        line,
+        open: /\bopen\b/i.test(piece.attrs),
+        summary: [],
+        blocks: [],
+        inSummary: false,
+      });
+    } else if (piece.kind === 'close' && piece.tag === 'details' && frame) {
+      flush();
+      stack.pop();
+      push(closeDetails(frame));
+    } else if (piece.kind === 'open' && piece.tag === 'summary' && frame) {
+      flush();
+      frame.inSummary = true;
+    } else if (piece.kind === 'close' && piece.tag === 'summary' && frame) {
+      frame.inSummary = false;
+    } else {
+      const text = piece.kind === 'text' ? piece.text : piece.raw;
+      if (frame?.inSummary) frame.summary.push({ kind: 'text', text });
+      else literal += text;
+    }
+  }
+  flush();
 }
 
 function convertBlock(token: Token, line: number): MdBlock | null {
