@@ -13,6 +13,37 @@ describe('scanHtml', () => {
     ]);
   });
 
+  /*
+    The input is an untrusted README, scanned on the renderer's thread. A tag
+    pattern whose attribute run and trailing whitespace both match spaces
+    backtracks quadratically: 40k spaces took over a second, 200 KB half a
+    minute. Each case here is linear now; quadratic would blow the budget.
+  */
+  it.each([
+    ['spaces before a stray character', `<a ${' '.repeat(100_000)}b`],
+    ['an unterminated quote', `<a x="${'y'.repeat(100_000)}`],
+    ['open angles with no close', '<a '.repeat(30_000)],
+  ])('scans %s in linear time', (_label, html) => {
+    const started = performance.now();
+    scanHtml(html);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('keeps a quoted > inside an attribute', () => {
+    expect(scanHtml('<img alt=">" src="a.png">')).toEqual([
+      { kind: 'open', tag: 'img', attrs: ' alt=">" src="a.png"', raw: '<img alt=">" src="a.png">', selfClosing: false },
+    ]);
+  });
+
+  it('reads <br /> as self-closing, and <!--> as a comment', () => {
+    expect(scanHtml('<br />')[0]).toMatchObject({ kind: 'open', tag: 'br', selfClosing: true });
+    expect(scanHtml('<!-->x<!--->')).toEqual([
+      { kind: 'comment' },
+      { kind: 'text', text: 'x' },
+      { kind: 'comment' },
+    ]);
+  });
+
   it('treats a stray < as text', () => {
     expect(scanHtml('a < b')).toEqual([
       { kind: 'text', text: 'a ' },
@@ -42,5 +73,10 @@ describe('imgAttributes', () => {
       alt: 'A',
     });
     expect(imgAttributes(' onerror="x"')).toEqual({ src: '', alt: '' });
+  });
+
+  it('reads the real src, not data-src, and unquoted values', () => {
+    expect(imgAttributes(' data-src="evil" src="real"')).toEqual({ src: 'real', alt: '' });
+    expect(imgAttributes(' src=a.png alt=A')).toEqual({ src: 'a.png', alt: 'A' });
   });
 });

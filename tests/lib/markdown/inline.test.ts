@@ -120,4 +120,40 @@ describe('convertInlines — raw HTML', () => {
     });
     expect(inlinesOf('x </kbd> y')[1]).toEqual({ kind: 'text', text: '</kbd>' });
   });
+
+  it('closes mismatched nesting into allowlisted nodes only', () => {
+    expect(inlinesOf('<kbd><sub>x</kbd> y')).toEqual([
+      {
+        kind: 'tag',
+        tag: 'kbd',
+        children: [
+          {
+            kind: 'tag',
+            tag: 'sub',
+            children: [
+              { kind: 'text', text: 'x' },
+              { kind: 'text', text: '</kbd>' },
+              { kind: 'text', text: ' y' },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('drops an allowed tag’s attributes, reads it in any case, and leaves <kbd/> as text', () => {
+    expect(inlinesOf('x <KBD onclick="boom()">K</KBD>')[1]).toEqual({
+      kind: 'tag',
+      tag: 'kbd',
+      children: [{ kind: 'text', text: 'K' }],
+    });
+    expect(inlinesOf('x <kbd/> y')[1]).toEqual({ kind: 'text', text: '<kbd/>' });
+  });
+
+  it('shows an inline <iframe> as text', () => {
+    expect(inlinesOf('x <iframe src="https://evil.example"></iframe>')[1]).toEqual({
+      kind: 'text',
+      text: '<iframe src="https://evil.example">',
+    });
+  });
 });
