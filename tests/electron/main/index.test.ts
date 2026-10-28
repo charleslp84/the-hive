@@ -137,7 +137,13 @@ describe('the boot path holds one hive folder (HIVE-227)', () => {
   it('refuses with the folder and the holder, and releases on process exit, after every shutdown hook', () => {
     expect(source).toContain("process.on('exit', hiveLock.release)");
     expect(source).not.toContain('onShutdown(hiveLock.release)');
-    expect(source).toContain("dialog.showErrorBox('The Hive is already running'");
+    expect(source).toContain("dialog.showErrorBox('HiveTTY is already running'");
     expect(source).toContain('if (!serverMode) dialog.showErrorBox');
+  });
+
+  it('names the app HiveTTY and gives an unpackaged build its own userData folder (HIVE-326)', () => {
+    expect(source).toContain('app.setName(APP_NAME);');
+    expect(source).toContain("app.setPath('userData', join(app.getPath('appData'), DEV_USER_DATA_NAME));");
+    expect(source).not.toContain("'the-hive'");
   });
 });
